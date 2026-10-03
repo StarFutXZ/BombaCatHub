@@ -48,6 +48,9 @@ Config = {
     },
     AutoKen = true,
     BringMobs = true,
+    -- Bring mobs from across nearby islands, but only names in the active farm target list.
+    BringRadius = 800,
+    BringMaxMobs = 30,
     PanicMode = {
         Enabled          = true,
         LowHealthPercent = 20,
@@ -1290,21 +1293,6 @@ end
         print('[ Debug ] re-registering events')
         RegisterLocalPlayerEventsConnection(LocalPlayer)
     end)
-
-    -- [BOMBA CAT FIX] Manter o Haki do Armamento (Buso/Aura) ativo.
-    -- Verifica periodicamente, não apenas quando o personagem renasce.
-    task.spawn(function()
-        while task.wait(2) do
-            pcall(function()
-                local character = LocalPlayer.Character
-                local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-                if character and humanoid and humanoid.Health > 0
-                    and not character:FindFirstChild("HasBuso") then
-                    Remotes.CommF_:InvokeServer("Buso")
-                end
-            end)
-        end
-    end)
     task.spawn(function()
         task.wait(3)
         if LocalPlayer.Character:FindFirstChild("HasBuso") then return end
@@ -1695,7 +1683,7 @@ end
     -- Agora: UM loop no Heartbeat move o block em direção a FlyCtl.Goal a
     -- velocidade constante (dt-based). Create() só actualiza o alvo.
     -- Se detectar rubber-band, reduz a velocidade sozinho e recupera depois.
-    -- Config opcional: FlySpeed (def. 280), FlySpeedMax (def. 360, só em
+    -- Config opcional: FlySpeed (def. 200), FlySpeedMax (def. 260, só em
     -- distâncias longas), OrbitDegPerSec (def. 120).
     -- ============================================================
     FlyCtl = {
@@ -1703,8 +1691,8 @@ end
         Penalty = 1, PenaltyUntil = 0, LastSet = nil, LastBackoff = 0, WasOn = false,
     }
     function FlyCtl.SpeedFor(dist)
-        local base = Config.FlySpeed or 280
-        local maxs = Config.FlySpeedMax or 360
+        local base = Config.FlySpeed or 200
+        local maxs = Config.FlySpeedMax or 260
         local t = math.clamp((dist - 600) / 2400, 0, 1)
         return (base + (maxs - base) * t) * FlyCtl.Penalty
     end
@@ -1753,17 +1741,17 @@ end
                 FlyCtl.Active = true
                 local cur = block.Position
 
-                -- Deteção de rubber-band: não reposicionar o block para a posição
-                -- do HRP, porque isso fazia o voo recuar. Ajustar a velocidade
-                -- ligeiramente e manter o alvo/progresso atual.
+                -- deteção de rubber-band: o servidor/anti-cheat devolveu-nos para trás
                 if FlyCtl.LastSet and (hrp.Position - FlyCtl.LastSet).Magnitude > 30
-                   and now - FlyCtl.LastBackoff > 1.0 then
+                   and now - FlyCtl.LastBackoff > 0.5 then
                     FlyCtl.LastBackoff = now
-                    FlyCtl.Penalty = math.max(0.75, FlyCtl.Penalty - 0.05)
-                    FlyCtl.PenaltyUntil = now + 8
+                    FlyCtl.Penalty = math.max(0.55, FlyCtl.Penalty - 0.12)
+                    FlyCtl.PenaltyUntil = now + 25
+                    block.CFrame = hrp.CFrame
+                    cur = block.Position
                 end
                 if now > FlyCtl.PenaltyUntil and FlyCtl.Penalty < 1 then
-                    FlyCtl.Penalty = math.min(1, FlyCtl.Penalty + dt * 0.06)
+                    FlyCtl.Penalty = math.min(1, FlyCtl.Penalty + dt * 0.04)
                 end
 
                 local delta = goal.Position - cur
@@ -1872,6 +1860,181 @@ end
     -- ============================================================
     -- [FIXED] TWEEN CONTROLLER - GIỮ NGUYÊN 200/190
     -- ============================================================
+    -- ============================================================
+    -- [FIXED v4] SEA 1 — UNDERWATER CITY VIA WHIRLPOOL
+    -- A entrada é o redemoinho (whirlpool) rodeado por 3 pedras pequenas, entre
+    -- Frozen Village e Prison. O requestEntrance só funciona ESTANDO junto ao
+    -- redemoinho. Bug antigo: o script chamava requestEntrance de longe (o
+    -- servidor ignorava) e depois voava em linha reta para as coordenadas da
+    -- cidade (x ~ 61000) = "horizonte" até lá chegar por voo.
+    -- Agora: voa ao redemoinho, chama requestEntrance perto dele, confirma que
+    -- entrou (x > 40000); alterna entre 2 pontos do redemoinho; se falhar 6x
+    -- cai no comportamento antigo durante 60s (Config.WhirlpoolNoFallback=true
+    -- desativa esse recuo e fica a tentar o redemoinho).
+    -- ============================================================
+    local UW = {attempts = 0, lastTry = 0, fallbackUntil = 0, step = 0}
+    local UW_ENTRIES = {
+        Vector3.new(3876.28, 35.11, -1939.32),   -- da tabela Portals do script
+        Vector3.new(3864.69, 6.74, -1926.21),    -- centro ao nível do mar
+    }
+    local UW_DEST = Vector3.new(61163.8515625, 11.759522438049316, 1819.7841796875)
+
+    function TweenController.InUnderwaterCity(pos)
+        return pos.X > 40000
+    end
+
+    -- ============================================================
+    -- [FIXED v5] SAÍDA DA UNDERWATER CITY PELO PORTAL
+    -- A saída certa é o portal azul no centro da cúpula (coordenadas da tabela
+    -- Portals do script). requestEntrance só funciona junto a esse portal; o
+    -- destino é o Whirlpool. Antes o script voava ~57 000 studs em linha reta.
+    -- Mesmo esquema do Whirlpool: voa ao portal, tenta até 6x (alternando 2
+    -- pontos), confirma a saída (x <= 40000); se falhar recua 60s para o voo antigo.
+    -- ============================================================
+    local UWX = {attempts = 0, lastTry = 0, fallbackUntil = 0, step = 0}
+    local UWX_ENTRIES = {
+        Vector3.new(61163.8515625, 11.759522438049316, 1819.7841796875),  -- tabela Portals
+        Vector3.new(61164, 5, 1820),                                      -- "Underwater City" (ilhas)
+    }
+    local UWX_DEST = Vector3.new(3876.280517578125, 35.10614013671875, -1939.3201904296875)  -- Whirlpool
+
+    -- true = tratado aqui (não seguir); false = deixar o fluxo normal continuar
+    function TweenController.GoToCityExit()
+        local char = game.Players.LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return true end
+        if not Config.WhirlpoolNoFallback and os.time() < UWX.fallbackUntil then return false end
+
+        local entry = UWX_ENTRIES[(UWX.step % #UWX_ENTRIES) + 1]
+        pcall(function() SetTask("SubTask", "Portal -> sair da Underwater City") end)
+        FlyCtl.SetGoal(CFrame.new(entry))
+
+        if (hrp.Position - entry).Magnitude > 12 then return true end   -- ainda a caminho
+
+        if tick() - UWX.lastTry < 1.5 then return true end
+        UWX.lastTry = tick()
+        UWX.attempts = UWX.attempts + 1
+        task.spawn(function()
+            pcall(function() Remotes.CommF_:InvokeServer("requestEntrance", UWX_DEST) end)
+        end)
+        task.wait(1)
+
+        if TweenController.InUnderwaterCity(hrp.Position) then
+            UWX.step = UWX.step + 1                     -- tenta o outro ponto do portal
+            if UWX.attempts >= 6 then
+                UWX.attempts = 0
+                UWX.fallbackUntil = os.time() + 60
+                pcall(function() Report("Portal: 6 tentativas sem sair da Underwater City") end)
+            end
+        else
+            UWX.attempts = 0
+        end
+        return true
+    end
+
+    -- true = tratado aqui (não seguir); false = deixar o fluxo normal continuar
+    function TweenController.GoToWhirlpool()
+        local char = game.Players.LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return true end
+        if not Config.WhirlpoolNoFallback and os.time() < UW.fallbackUntil then return false end
+
+        local entry = UW_ENTRIES[(UW.step % #UW_ENTRIES) + 1]
+        pcall(function() SetTask("SubTask", "Whirlpool -> Underwater City") end)
+        FlyCtl.SetGoal(CFrame.new(entry))
+
+        if (hrp.Position - entry).Magnitude > 12 then return true end   -- ainda a caminho
+
+        if tick() - UW.lastTry < 1.5 then return true end
+        UW.lastTry = tick()
+        UW.attempts = UW.attempts + 1
+        task.spawn(function()
+            pcall(function() Remotes.CommF_:InvokeServer("requestEntrance", UW_DEST) end)
+        end)
+        task.wait(1)
+
+        if not TweenController.InUnderwaterCity(hrp.Position) then
+            UW.step = UW.step + 1                       -- tenta o outro ponto do redemoinho
+            if UW.attempts >= 6 then
+                UW.attempts = 0
+                UW.fallbackUntil = os.time() + 60
+                pcall(function() Report("Whirlpool: 6 tentativas sem entrar na Underwater City") end)
+            end
+        else
+            UW.attempts = 0
+        end
+        return true
+    end
+
+    -- ============================================================
+    -- [FIXED v3] VIAGEM PARA A ILHA SUBMERSA
+    -- Bug antigo: depois de chegar ao NPC chamava o remote UMA vez e seguia
+    -- logo para FlyCtl.SetGoal(alvo) mesmo que o teleporte falhasse → o
+    -- personagem voava para as coordenadas da ilha (mar aberto) até ao
+    -- "horizonte". Agora: voa até ao Submarine Worker, tenta o remote várias
+    -- vezes, confirma que entrou (zona submersa) e, se falhar, PÁRA e espera
+    -- 2 min em vez de voar para o mar.
+    -- Requisito do jogo: ter derrotado o Tyrant of the Skies pelo menos 1x
+    -- (senão o NPC só diz que a ilha está ocupada por bandidos).
+    -- ============================================================
+    local SubTravel = {attempts = 0, lastTry = 0, blockedUntil = 0}
+    local SUB_NPC_FALLBACK = Vector3.new(-16269.7, 25.2, 1373.7)
+
+    function TweenController.InSubmergedZone(pos)
+        return pos.Y < -1200 and pos.X > 8000 and pos.X < 13000
+           and pos.Z > 8000 and pos.Z < 11500
+    end
+
+    local function FindSubmarineWorker()
+        for _, root in ipairs({workspace:FindFirstChild("NPCs"), game.ReplicatedStorage:FindFirstChild("NPCs")}) do
+            if root then
+                for _, npc in ipairs(root:GetChildren()) do
+                    if npc.Name == "Submarine Worker" then
+                        local ok, p = pcall(function() return npc:GetPivot().Position end)
+                        -- o da superfície (Tiki Outpost), não o da ilha submersa
+                        if ok and p.Y > -1000 and p.X < -10000 then return p end
+                    end
+                end
+            end
+        end
+        return SUB_NPC_FALLBACK
+    end
+
+    function TweenController.GoToSubmarine()
+        local char = game.Players.LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        if os.time() < SubTravel.blockedUntil then return end   -- falhou: não voa para o mar
+
+        local npcPos = FindSubmarineWorker()
+        local standAt = CFrame.new(npcPos + Vector3.new(0, 3, 0))
+        pcall(function() SetTask("SubTask", "Submarine Worker -> Ilha Submersa") end)
+        FlyCtl.SetGoal(standAt)                       -- voa/mantém-se junto ao NPC
+
+        if (hrp.Position - npcPos).Magnitude > 15 then
+            SubTravel.attempts = 0
+            return
+        end
+
+        if tick() - SubTravel.lastTry < 3 then return end
+        SubTravel.lastTry = tick()
+        SubTravel.attempts = SubTravel.attempts + 1
+        task.spawn(function()
+            pcall(function()
+                local net = require(game.ReplicatedStorage.Modules.Net)
+                net:RemoteFunction('SubmarineWorkerSpeak'):InvokeServer('TravelToSubmergedIsland')
+            end)
+        end)
+        task.wait(1.5)
+
+        if SubTravel.attempts >= 5 and not TweenController.InSubmergedZone(hrp.Position) then
+            SubTravel.blockedUntil = os.time() + 120
+            SubTravel.attempts = 0
+            pcall(function() SetTask("SubTask", "Submarine: nao entrou na Ilha Submersa (falta derrotar Tyrant of the Skies?)") end)
+            pcall(function() Report("Submarine Worker: 5 tentativas sem entrar na Ilha Submersa") end)
+        end
+    end
+
     function TweenController.Create(W)
         if not W or TweenDebounce then return end
         local a = typeof(W) ~= 'CFrame' and ConvertTo(CFrame, W) or W
@@ -1891,21 +2054,32 @@ end
             bv.Velocity = Vector3.zero
             bv.Parent = head
         end
+        -- [FIXED v5] Sea 1: estamos dentro da Underwater City e o alvo está fora →
+        -- sair primeiro pelo portal do centro da cúpula.
+        if SeaIndex == 1 and TweenController.InUnderwaterCity(hrp.Position)
+           and not TweenController.InUnderwaterCity(a.Position) then
+            if TweenController.GoToCityExit() then return end
+        end
+        -- [FIXED v4] Sea 1: alvo dentro da Underwater City e ainda não estamos lá →
+        -- ir ao Whirlpool (não voar em linha reta para x ~ 61000).
+        if SeaIndex == 1 and TweenController.InUnderwaterCity(a.Position)
+           and not TweenController.InUnderwaterCity(hrp.Position) then
+            if TweenController.GoToWhirlpool() then return end
+        end
+        -- [FIXED v3] Ilha Submersa: só se entra pelo Submarine Worker (Tiki Outpost,
+        -- Sub Port 01). Nunca voar em direção às coordenadas da ilha (fica no
+        -- fundo do mar = "horizonte"); se o alvo está lá dentro e ainda não estamos,
+        -- o controlo passa para GoToSubmarine().
+        if SeaIndex == 3 and TweenController.InSubmergedZone(a.Position)
+           and not TweenController.InSubmergedZone(hrp.Position) then
+            TweenController.GoToSubmarine()
+            return
+        end
         if CaculateDistance(a) > 500 then
             if SeaIndex == 3 and not ScriptStorage.Backpack['Valkyrie Helm'] then
             elseif SeaIndex ~= 3 then
                 GetPortal(a)
             end
-        end
-        if CaculateDistance(Vector3.new(11256, -2138.0, 9888), a) < (CaculateDistance(a) - 700) and SeaIndex == 3 then
-            local gatePos = CFrame.new(-16269.0, 23, 1371)
-            if CaculateDistance(gatePos) > 60 then
-                TweenController.Create(gatePos)
-                task.wait(1)
-                return
-            end
-            local net = require(game.ReplicatedStorage.Modules.Net)
-            net:RemoteFunction('SubmarineWorkerSpeak'):InvokeServer('TravelToSubmergedIsland')
         end
 
         -- [FIXED v2] só actualiza o alvo; o movimento é feito pelo FlyCtl (Heartbeat)
@@ -1937,7 +2111,13 @@ end
         for X, X in pairs(workspace.Enemies:GetChildren()) do
             if X:FindFirstChild('Humanoid') and X:FindFirstChild('HumanoidRootPart') and X.Humanoid.Health > 0 and (X.HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 65 then
                 local f = AttackFilterNames
-                if not f or (tick() - (AttackFilterTick or 0)) > 1.5 or f[X.Name] then
+                -- [FIXED v9] mob que o bring acabou de mover e ainda não foi confirmado pelo
+                -- servidor (estado "probe") está num sítio FALSO só no teu cliente. Se for
+                -- incluído no RegisterHit, o servidor vê um alvo fora de alcance e pode
+                -- rejeitar o pacote inteiro (ninguém leva dano) — por isso fica de fora.
+                local bp = BringProbe and BringProbe[X]
+                local unverified = bp ~= nil and bp.state == "probe"
+                if (not unverified) and (not f or (tick() - (AttackFilterTick or 0)) > 1.5 or f[X.Name]) then
                     table.insert(bladehits, X)
                 end
             end
@@ -1984,11 +2164,11 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     -- * Anchor = o mob com que o ataque começou (BringSetAnchor).
     --   Mantém-se fixo até esse mob morrer / o combate acabar; depois
     --   o próximo mob atacado passa a ser o novo anchor.
-    -- * Só puxa mobs do MESMO NOME do anchor, dentro de BringRadius do anchor.
+    -- * Só puxa nomes presentes no filtro do farm ativo; fallback: nome do anchor.
+    -- * Raio moderado para evitar puxar NPCs demasiado distantes.
     -- * Corre no Heartbeat (cada frame) para os mobs não "fugirem" entre updates.
     -- * Só mexe em mobs de que somos network owner (senão não replica).
-    -- * Config.BringMobs liga/desliga. Config.BringRadius (opcional, def. 350),
-    --   Config.BringMaxMobs (opcional, def. 25).
+    -- * Config.BringMobs liga/desliga. BringRadius default 800, BringMaxMobs default 30.
     -- ============================================================
     BringAnchor     = nil   -- Model do 1.º mob atacado
     BringAnchorTick = 0     -- atualizado pelo loop de ataque (auto-limpa ao sair)
@@ -2023,18 +2203,48 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         AttackFilterTick  = tick()
     end
 
+    -- Prisioneiros: o bring só é bloqueado para NPCs "prisoner" quando o jogador
+    -- está na ilha da prisão (Sea 1). Em qualquer outro sítio funciona normal.
+    local PRISON_CENTER = Vector3.new(4870, 6, 736)
+    local function _onPrisonIsland()
+        if SeaIndex ~= 1 then return false end
+        local c = game.Players.LocalPlayer.Character
+        local r = c and c:FindFirstChild("HumanoidRootPart")
+        return r ~= nil and (r.Position - PRISON_CENTER).Magnitude < 1500
+    end
+    local function _isPrisonerBlocked(name)
+        return string.find(string.lower(name), "prisoner", 1, true) ~= nil and _onPrisonIsland()
+    end
+
+    -- [v8] teste empírico de ownership: estado por mob = probe / ok / ghost
+    BringProbe = setmetatable({}, {__mode = "k"})   -- global: o fast attack também a lê
+    local function _isMineStrict(part)
+        if not isnetworkowner then return false end
+        local ok, res = pcall(isnetworkowner, part)
+        return ok and res == true
+    end
     local _bringSimTick = 0
     local function _isMine(part)
+        -- Network ownership APIs differ between executors. Treat errors as
+        -- non-blocking and do not reject the whole Bring cycle on a false/unknown result.
         if not isnetworkowner then return true end
         local ok, res = pcall(isnetworkowner, part)
-        return (not ok) or res
+        if not ok or res == nil then return true end
+        return res == true
     end
 
     BringEnemy = function()
         if not Config.BringMobs then return end
         local anchor = BringAnchor
         if not anchor or anchor.Parent ~= workspace:FindFirstChild("Enemies") then return end  -- ignora templates do ReplicatedStorage
-        if tick() - BringAnchorTick > 0.6 then return end          -- combate já acabou
+        -- SHANDA / ROYAL SQUAD FIX: desativa o Bring Mobs apenas nestes NPCs.
+        -- O ciclo de atração pode interferir quando restam poucos inimigos da missão.
+        if anchor.Name == "Shanda" or anchor.Name == "Royal Squad" then return end
+        -- Prisoner NPCs: nunca usar como âncora — mas só na ilha da prisão.
+        if _isPrisonerBlocked(anchor.Name) then return end
+        -- Allow a slightly wider scheduling gap; the attack loop refreshes this
+        -- timestamp while the target remains alive.
+        if tick() - BringAnchorTick > 2.0 then return end
         local aHum  = anchor:FindFirstChildOfClass("Humanoid")
         local aRoot = anchor:FindFirstChild("HumanoidRootPart")
         if not aHum or aHum.Health <= 0 or not aRoot then return end
@@ -2049,36 +2259,89 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             pcall(function() sethiddenproperty(LocalPlayer, "MaximumSimulationRadius", math.huge) end)
         end
 
-        local radius  = Config.BringRadius or 350
-        local maxPull = Config.BringMaxMobs or 25
+        local radius  = Config.BringRadius or 800
+        local maxPull = Config.BringMaxMobs or 30
         local target  = aRoot.CFrame
         local aPos    = aRoot.Position
         local pulled  = 0
+        local notOwner = 0
+        -- Use the names passed to the current CombatController.Attack call.
+        -- If that short-lived filter is unavailable, fall back to the anchor's name.
+        local activeNames = AttackFilterNames
+        local filterFresh = activeNames and (tick() - (AttackFilterTick or 0)) <= 1.5
 
         for _, v in ipairs(folder:GetChildren()) do
             if pulled >= maxPull then break end
-            if v ~= anchor and v.Name == anchor.Name then
+            local isPrisoner = _isPrisonerBlocked(v.Name)
+            local isSpecialNoBring = v.Name == "Shanda" or v.Name == "Royal Squad"
+            local isFarmTarget = filterFresh and activeNames[v.Name] or v.Name == anchor.Name
+            -- Não puxar Shandas nem Royal Squads, mesmo como alvos secundários.
+            if v ~= anchor and not isPrisoner and not isSpecialNoBring and isFarmTarget then
                 local hum  = v:FindFirstChildOfClass("Humanoid")
                 local root = v:FindFirstChild("HumanoidRootPart")
                 if hum and root and hum.Health > 0
-                   and (root.Position - aPos).Magnitude <= radius
-                   and _isMine(root) then
-                    pulled = pulled + 1
-                    if (root.Position - aPos).Magnitude > 2 then
-                        root.CFrame = target
+                   and (root.Position - aPos).Magnitude <= radius then
+                    -- [FIXED v8] TESTE EMPÍRICO DE OWNERSHIP (isnetworkowner() falha/mente em
+                    -- vários executors e com ele o bring deixou de puxar). Puxa-se o mob e
+                    -- vê-se o que acontece: se ao fim de 0.35s ele continua junto ao ponto de
+                    -- atração, o servidor aceitou a posição (ok); se voltou ao sítio dele, é um
+                    -- "fantasma" (só se mexia no teu ecrã): deixa de ser puxado durante 8s e
+                    -- depois volta a ser testado. Fantasmas = mobs que o servidor não te deu.
+                    local now  = tick()
+                    local st   = BringProbe[v]
+                    local dist = (root.Position - aPos).Magnitude
+                    local skip = false
+                    if st and st.state == "ghost" then
+                        if now >= st.untilT then
+                            BringProbe[v] = nil
+                            st = nil
+                        else
+                            skip = true
+                            notOwner = notOwner + 1
+                        end
                     end
-                    root.CanCollide = false
-                    root.AssemblyLinearVelocity  = Vector3.zero
-                    root.AssemblyAngularVelocity = Vector3.zero
-                    hum.WalkSpeed = 0
-                    hum.JumpPower = 0
-                    hum.AutoRotate = false
-                    pcall(function() hum:ChangeState(Enum.HumanoidStateType.Physics) end)
-                    local head = v:FindFirstChild("Head")
-                    if head then head.CanCollide = false end
+                    if not skip then
+                        if not st then
+                            st = {t0 = now, state = "probe", bad = 0}
+                            BringProbe[v] = st
+                        end
+                        if st.state == "probe" then
+                            if now - st.t0 > 0.35 then
+                                if dist < 8 or _isMineStrict(root) then
+                                    st.state = "ok"
+                                else
+                                    st.state = "ghost"; st.untilT = now + 8
+                                end
+                            end
+                        elseif st.state == "ok" then
+                            if dist > 20 and not _isMineStrict(root) then
+                                st.bad = st.bad + 1
+                                if st.bad > 20 then st.state = "ghost"; st.untilT = now + 8; st.bad = 0 end
+                            else
+                                st.bad = 0
+                            end
+                        end
+                        if st.state == "ghost" then
+                            notOwner = notOwner + 1
+                        else
+                            pulled = pulled + 1
+                            pcall(function()
+                                if dist > 2 then
+                                    root.CFrame = target
+                                end
+                                root.CanCollide = false
+                                root.AssemblyLinearVelocity  = Vector3.zero
+                                root.AssemblyAngularVelocity = Vector3.zero
+                                local head = v:FindFirstChild("Head")
+                                if head then head.CanCollide = false end
+                            end)
+                        end
+                    end
                 end
             end
         end
+        BringDbgText = "Bring: " .. pulled .. " puxados, " .. notOwner .. " fantasma"
+        BringDbgTick = tick()
     end
 
     game:GetService("RunService").Heartbeat:Connect(function()
@@ -2122,23 +2385,45 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             end
         end
     end
+    -- Detecta o aviso da missao sem excluir todos os NPCs com o mesmo nome.
+    local function IsPrisonerBlocked()
+        local player = game:GetService("Players").LocalPlayer
+        local playerGui = player and player:FindFirstChild("PlayerGui")
+        if not playerGui then return false end
+
+        for _, obj in ipairs(playerGui:GetDescendants()) do
+            if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+                local txt = string.lower(obj.Text or "")
+                if string.find(txt, "confront the prisoner before attacking", 1, true) then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+    local PrisonerBlockLatched = false
     function Sort1(entity) return entity and entity:FindFirstChild("HumanoidRootPart") and math.floor(CaculateDistance(entity.HumanoidRootPart.CFrame)) end
-
-    -- NPCs que o Auto Farm deve ignorar completamente.
-    -- Para voltar a atacar Prisoner, remove a linha ["Prisoner"] = true.
-    local IGNORE_LEVEL_FARM_NPCS = {
-        ["Prisoner"] = true,
-    }
-
     function CombatController.Search(names)
         local candidates = {}
         local anyFound = false
+        -- [FIXED] GetMonAsSortedRange() mistura os mobs reais com os "templates" do
+        -- ReplicatedStorage e ordena só por distância: se o template estivesse mais
+        -- perto que qualquer mob vivo, ele era escolhido e o script ficava a voar
+        -- ao pé do ponto de spawn "a atacar" sem nada para matar. Agora só os mobs
+        -- reais (workspace.Enemies) contam; o template fica como último recurso
+        -- (abaixo), para ir até ao spawn quando não há mobs vivos.
+        local enemiesFolder = workspace:FindFirstChild("Enemies")
         for _, entity in GetMonAsSortedRange() do
-            if not IGNORE_LEVEL_FARM_NPCS[entity.Name]
-                and table.find(names, entity.Name)
-                and entity:FindFirstChild("Humanoid")
-                and entity.Humanoid.Health > 0 then
-                if (entity:GetAttribute('FailureCount') or 0) < 3 then
+            if entity.Parent == enemiesFolder and table.find(names, entity.Name) and entity:FindFirstChild("Humanoid") and entity.Humanoid.Health > 0 then
+                -- Shanda: não deixar FailureCount antigo excluir os últimos NPCs vivos.
+                -- Ao restarem poucos mobs, os restantes podem herdar falhas de tentativas
+                -- anteriores; continuar a selecioná-los evita cair no template do spawn.
+                if entity.Name == "Shanda" then
+                    entity:SetAttribute("FailureCount", 0)
+                    entity:SetAttribute("IgnoreGrab", nil)
+                    anyFound = true
+                    table.insert(candidates, entity)
+                elseif (entity:GetAttribute('FailureCount') or 0) < 3 then
                     anyFound = true
                     table.insert(candidates, entity)
                 end
@@ -2149,12 +2434,22 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             local best = candidates[1]
             return best
         end
-        for _, npcName in names do
-            -- Não devolver modelos de ReplicatedStorage para NPCs bloqueados.
-            if not IGNORE_LEVEL_FARM_NPCS[npcName] then
-                local npc = game.ReplicatedStorage:FindFirstChild(npcName)
-                if npc then return npc end
+        -- [FIXED v7] anti-stuck: se TODOS os mobs deste nome foram marcados como
+        -- falhados (FailureCount>=3), o script ficava parado para sempre. Limpa a
+        -- marca de 10 em 10 s (exceto "Prisoner": esses são marcados de propósito).
+        if enemiesFolder and tick() - (FailResetTick or 0) > 10 then
+            FailResetTick = tick()
+            for _, entity in ipairs(enemiesFolder:GetChildren()) do
+                if entity.Name ~= "Prisoner" and table.find(names, entity.Name)
+                   and (entity:GetAttribute('FailureCount') or 0) >= 3 then
+                    entity:SetAttribute('FailureCount', 0)
+                    entity:SetAttribute('IgnoreGrab', nil)
+                end
             end
+        end
+        for _, npcName in names do
+            local npc = game.ReplicatedStorage:FindFirstChild(npcName)
+            if npc then return npc end
         end
     end
     function CombatController.Attack(h, X, w, D)
@@ -2165,6 +2460,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         sethiddenproperty(game.Players.LocalPlayer, 'SimulationRadius', math.huge)
         h = type(h) == "string" and {h} or (h or {})
         if X then AttackFilterNames = nil else SetAttackFilter(h) end
+        local nameList = h
         for y, L in (h) do
             local b = tostring(L)
             if b == 'Deandre' or b == "Urban" or b == "Diablo" and (os.time() - (LastFire12 or 0)) > 180 then
@@ -2186,6 +2482,46 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 local w, b = 0, os.time()
                 while task.wait() do
                     if _G.Stop then return end
+
+                    -- Quando o aviso aparece durante o ataque a este Prisoner,
+                    -- marca apenas esta instancia e volta ao farm. Outros Prisoners
+                    -- com o mesmo nome continuam elegiveis.
+                    -- [PERF] só verifica quando o alvo é um "Prisoner" e no máximo 4x/s
+                    -- (antes varria o PlayerGui inteiro EM TODOS OS FRAMES, em qualquer mob).
+                    local prisonerBlocked = false
+                    if MonResult and MonResult.Name == "Prisoner" and tick() - (PrisonerCheckTick or 0) > 0.25 then
+                        PrisonerCheckTick = tick()
+                        prisonerBlocked = IsPrisonerBlocked()
+                        if not prisonerBlocked then PrisonerBlockLatched = false end
+                    end
+                    if prisonerBlocked and MonResult and MonResult.Name == "Prisoner" and not PrisonerBlockLatched then
+                        MonResult:SetAttribute("FailureCount", 3)
+                        PrisonerBlockLatched = true
+                        return
+                    end
+
+                    -- [FIXED] se o alvo ainda é o "template" do ReplicatedStorage (os mobs
+                    -- não estavam carregados quando a pesquisa correu), troca para o mob
+                    -- real assim que aparecer — senão o Bring Mobs ficava sem âncora.
+                    if not X and MonResult.Parent == game:GetService("ReplicatedStorage")
+                       and tick() - (ReSearchTick or 0) > 0.5 then
+                        ReSearchTick = tick()
+                        local real = CombatController.Search(nameList)
+                        if real and real.Parent == workspace:FindFirstChild("Enemies") then
+                            MonResult = real
+                            BringSetAnchor(real)
+                        end
+                    end
+
+                    if not X and tick() - (AtkDbgTick or 0) > 1 then
+                        AtkDbgTick = tick()
+                        pcall(function()
+                            local real = MonResult.Parent == workspace:FindFirstChild("Enemies")
+                            local dbg = (BringDbgText and tick() - (BringDbgTick or 0) < 2) and (' | ' .. BringDbgText) or ''
+                            SetTask('SubTask', '⚔️ Attacking ' .. tostring(MonResult.Name) .. (real and '' or ' [à espera de mob no spawn]') .. dbg)
+                        end)
+                    end
+
                     if ScriptStorage.Tools["Sweet Chalice"] and getsenv(game.ReplicatedStorage.GuideModule)["_G"]["InCombat"] then
                         pcall(function() if TweenInstance then TweenInstance:Cancel() end end) -- [FIXED] không tween về (0,0,0) khi Sweet Chalice InCombat
                         return
@@ -2195,6 +2531,11 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                     if not C or C.Health <= 0 then
                         if MonResult.Name == "Don Swan" then Storage:Set("SwanDefeated", true) end
                         break
+                    end
+                    -- Keep the Bring anchor alive throughout approach and attack,
+                    -- not only after reaching the 150-stud combat radius.
+                    if MonResult.Parent == workspace:FindFirstChild("Enemies") then
+                        BringKeepAlive()
                     end
                     TweenController.Create(CaculateCircreDirection(p.CFrame) + Vector3.new(0, 35, 0))
                     if CaculateDistance(p.Position + Vector3.new(0, 35, 0)) < 150 then
@@ -2387,7 +2728,13 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
 
     FunctionsHandler.MeleesController:RegisterMethod("Refresh", function()
         if not Config.Items.AutoFullyMelees or not Config.Melee.AutoBuy then return nil end
-        if ScriptStorage.PlayerData.Level < 200 then return nil end
+        -- Dark Step (Black Leg) pode ser comprado no Sea 1 assim que houver 150k Beli.
+        -- Antes do nível 300, só ativar este controlador para essa compra específica;
+        -- caso contrário, deixar o LevelFarm continuar normalmente.
+        local beliNow = ScriptStorage.PlayerData.Beli or 0
+        local needsDarkStep = not CheckItem("Black Leg")
+        local canBuyDarkStepSea1 = SeaIndex == 1 and needsDarkStep and beliNow >= 150000
+        if (ScriptStorage.PlayerData.Level or 0) < 300 and not canBuyDarkStepSea1 then return nil end
         -- [FIXED] Bỏ "if _G.Level then return nil end" — đây là khóa VĨNH VIỄN,
         -- một khi thiếu tiền 1 lần là MeleesController tắt luôn mãi mãi vì
         -- không có chỗ nào khác set lại _G.Level = false. Bỏ hẳn cờ này,
@@ -2405,12 +2752,38 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             SetTask('MainTask', 'Auto Full Melee | ✅ Đã có tất cả!')
             return nil
         end
+
+        -- [FIX] Không để Auto Full Melee chặn LevelFarm khi chưa thể avançar.
+        -- Electro só pode ser tentado depois de Black Leg atingir 500 mastery.
+        -- Se faltar dinheiro/Fragments para a próxima compra, cede a vez ao
+        -- LevelFarm para continuar a ganhar XP, Beli e mastery em vez de parar.
+        for _, name in ipairs(allMelees) do
+            if not CheckItem(name) then
+                if name == "Electro" and (ScriptStorage.Melees["Black Leg"] or 0) < 500 then
+                    return nil
+                end
+
+                local data = MeleePrices[name]
+                local price = data and data.Price or {}
+                local beli = ScriptStorage.PlayerData.Beli or 0
+                local fragments = ScriptStorage.PlayerData.Fragments or 0
+                if (price.Beli and beli < price.Beli)
+                    or (price.Fragments and fragments < price.Fragments) then
+                    return nil
+                end
+                break
+            end
+        end
         return true
     end)
 
     FunctionsHandler.MeleesController:RegisterMethod("Start", function()
         if not Config.Items.AutoFullyMelees or not Config.Melee.AutoBuy then return end
-        if ScriptStorage.PlayerData.Level < 200 then return end
+        -- Permitir comprar Dark Step no Sea 1 assim que houver 150k, mesmo antes do nível 200.
+        local canBuyDarkStepSea1 = SeaIndex == 1
+            and not CheckItem("Black Leg")
+            and (ScriptStorage.PlayerData.Beli or 0) >= 150000
+        if ScriptStorage.PlayerData.Level < 200 and not canBuyDarkStepSea1 then return end
 
         local meleeList = {
             -- [FIXED - LỖI NỀN TẢNG] Trước đây key = "BuyBlackLeg" v.v. —
@@ -2420,7 +2793,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             -- BuyMelee so sánh W=="DragonClaw"/"Godhuman" (không "Buy...")
             -- nên trước đây KHÔNG BAO GIỜ khớp, luôn rơi vào nhánh generic
             -- sai. Bỏ hẳn tiền tố "Buy" khỏi key — để BuyMelee tự thêm.
-            {name = "Black Leg", key = "BlackLeg", price = {Beli = 150000}, levelReq = 300},
+            {name = "Black Leg", key = "BlackLeg", price = {Beli = 150000}, levelReq = nil}, -- Dark Step no Sea 1: comprar ao ter 150k Beli
             {name = "Electro", key = "Electro", price = {Beli = 500000}, levelReq = 300},
             {name = "Fishman Karate", key = "FishmanKarate", price = {Beli = 750000}, levelReq = 300},
             {name = "Dragon Claw", key = "DragonClaw", price = {Fragments = 1500}, levelReq = 300},
@@ -3354,9 +3727,13 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             local foundMob = false
             for _, folder in ipairs({workspace.Enemies, game.ReplicatedStorage}) do
                 for _, v2 in ipairs(folder:GetChildren()) do
-                    if v2.Name == "Shanda" and v2:IsA("Model") then
+                    if folder == workspace.Enemies and v2.Name == "Shanda" and v2:IsA("Model") then
                         local hum = v2:FindFirstChildOfClass("Humanoid")
-                        if hum and hum.Health > 0 then
+                        local root = v2:FindFirstChild("HumanoidRootPart")
+                        if hum and root and hum.Health > 0 then
+                            -- Limpa o bloqueio antigo apenas neste NPC da missão.
+                            v2:SetAttribute("FailureCount", 0)
+                            v2:SetAttribute("IgnoreGrab", nil)
                             foundMob = true
                             SetTask("SubTask", "⚔️ Attacking Shanda")
                             CombatController.Attack("Shanda")
@@ -3455,13 +3832,6 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                     task.wait(0.3)
                 end
             end
-            -- Ignorar NPCs que não devem ser atacados pelo Level Farm.
-            -- A verificação em Search também impede selecionar o modelo de ReplicatedStorage.
-            if Q.Mon == "Prisoner" then
-                SetTask("SubTask", "⏭️ NPC ignorado: Prisoner")
-                return
-            end
-
             -- CombatController.Attack tự làm: tìm quái + tween + đánh
             -- (thay thế bringMob + equipWeapon + FastAttack + CheckMonster)
             CombatController.Attack(Q.Mon)
@@ -6485,7 +6855,12 @@ task.spawn(function()
     getgenv().HexUI = UI
 end)
 
-hoangtuveu()
+--============================================================
+-- [FIXED] EXTRAS (Gacha, códigos, no animation) movidos para ANTES de
+-- hoangtuveu(): essa função tem o loop principal infinito, por isso tudo
+-- o que ficava depois dela nunca chegava a correr (era por isso que o
+-- script não girava fruta). O bloco corre em task.spawn: não bloqueia.
+--============================================================
 --============================================================
 -- [EXTRAS] NO ANIMATION + AUTO REDEEM CODES + AUTO RANDOM FRUIT (GACHA)
 -- Opções (pode editar/desligar):
@@ -6586,6 +6961,7 @@ task.spawn(function()
     }
 end)
 
+hoangtuveu()
 --============================================================
 -- [VOID ATTACK] ATAQUE ENVIADO PELO USUARIO
 --============================================================
