@@ -1696,7 +1696,7 @@ end
     -- Agora: UM loop no Heartbeat move o block em direção a FlyCtl.Goal a
     -- velocidade constante (dt-based). Create() só actualiza o alvo.
     -- Se detectar rubber-band, reduz a velocidade sozinho e recupera depois.
-    -- Config opcional: FlySpeed (def. 200), FlySpeedMax (def. 260, só em
+    -- Config opcional: FlySpeed (def. 230), FlySpeedMax (def. 290, só em
     -- distâncias longas), OrbitDegPerSec (def. 120).
     -- ============================================================
     FlyCtl = {
@@ -1704,8 +1704,8 @@ end
         Penalty = 1, PenaltyUntil = 0, LastSet = nil, LastBackoff = 0, WasOn = false,
     }
     function FlyCtl.SpeedFor(dist)
-        local base = Config.FlySpeed or 200
-        local maxs = Config.FlySpeedMax or 260
+        local base = Config.FlySpeed or 230
+        local maxs = Config.FlySpeedMax or 290
         local t = math.clamp((dist - 600) / 2400, 0, 1)
         return (base + (maxs - base) * t) * FlyCtl.Penalty
     end
