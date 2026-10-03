@@ -48,6 +48,9 @@ Config = {
     },
     AutoKen = true,
     BringMobs = true,
+    -- Bring mobs from across nearby islands, but only names in the active farm target list.
+    BringRadius = 800,
+    BringMaxMobs = 30,
     PanicMode = {
         Enabled          = true,
         LowHealthPercent = 20,
@@ -62,7 +65,7 @@ Config = {
     AutoSea3 = true,
     AutoRaidIce_TargetFragments = 5000,
 }
-print("[Tiro] Script da duoc nap, dang cho game load...")
+print("[BombaCat Hub] Script carregado, a esperar o jogo carregar...")
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -72,7 +75,7 @@ local CoreGui = game:GetService("CoreGui")
 
 local lp = Players.LocalPlayer
 
-print("[Main] Bắt đầu Tiro Kaitun Modulo v2.2...")
+print("[BombaCat Hub] A iniciar...")
 timeee = os.time()
 local W_angle = 30
 local lastChange = tick()
@@ -127,667 +130,667 @@ end)
 -- KHÔNG wire vào đâu trực tiếp; dùng khi cần tra level→mob/quest
 -- ============================================================
 local GameData = {
-    QUESTS = {
-        Sea_1 = {
-            {1, 9, "Team-dependent", "Team-dependent", 1},
-            {10, 14, "Monkey", "JungleQuest", 1},
-            {15, 29, "Gorilla", "JungleQuest", 2, "The Gorilla King", 20},
-            {30, 39, "Pirate", "BuggyQuest1", 1},
-            {40, 59, "Brute", "BuggyQuest1", 2, "Chief", 55},
-            {60, 74, "Desert Bandit", "DesertQuest", 1},
-            {75, 89, "Desert Officer", "DesertQuest", 2},
-            {90, 99, "Snow Bandit", "SnowQuest", 1},
-            {100, 119, "Snowman", "SnowQuest", 2, "Yeti", 105},
-            {120, 149, "Chief Petty Officer", "MarineQuest2", 1, "Vice Admiral", 130},
-            {150, 174, "Sky Bandit", "SkyQuest", 1},
-            {175, 189, "Dark Master", "SkyQuest", 2},
-            {190, 209, "Prisoner", "PrisonerQuest", 1},
-            {210, 249, "Dangerous Prisoner", "PrisonerQuest", 2, {"Warden", 220, "ImpelQuest", 1}, {"Chief Warden", 230, "ImpelQuest", 2}, {"Swan", 240, "ImpelQuest", 3}},
-            {250, 274, "Toga Warrior", "ColosseumQuest", 1},
-            {275, 299, "Gladiator", "ColosseumQuest", 2},
-            {300, 324, "Military Soldier", "MagmaQuest", 1},
-            {325, 374, "Military Spy", "MagmaQuest", 2, "Magma Admiral", 350},
-            {375, 399, "Fishman Warrior", "FishmanQuest", 1},
-            {400, 449, "Fishman Commando", "FishmanQuest", 2, "Fishman Lord", 425},
-            {450, 474, "God's Guard", "SkyExp1Quest", 1},
-            {475, 524, "Shanda", "SkyExp1Quest", 2, "Wysper", 500},
-            {525, 549, "Royal Squad", "SkyExp2Quest", 1},
-            {550, 624, "Royal Soldier", "SkyExp2Quest", 2, "Thunder God", 575},
-            {625, 649, "Galley Pirate", "FountainQuest", 1},
-            {650, 9999, "Galley Captain", "FountainQuest", 2, "Cyborg", 675},
-        },
-        Sea_2 = {
-            {700, 724, "Raider", "Area1Quest", 1},
-            {725, 774, "Mercenary", "Area1Quest", 2, "Diamond", 750},
-            {775, 799, "Swan Pirate", "Area2Quest", 1},
-            {800, 874, "Factory Staff", "Area2Quest", 2, "Jeremy", 850},
-            {875, 899, "Marine Lieutenant", "MarineQuest3", 1},
-            {900, 949, "Marine Captain", "MarineQuest3", 2, "Orbitus", 925},
-            {950, 974, "Zombie", "ZombieQuest", 1},
-            {975, 999, "Vampire", "ZombieQuest", 2},
-            {1000, 1049, "Snow Trooper", "SnowMountainQuest", 1},
-            {1050, 1099, "Winter Warrior", "SnowMountainQuest", 2},
-            {1100, 1124, "Lab Subordinate", "IceSideQuest", 1},
-            {1125, 1174, "Horned Warrior", "IceSideQuest", 2, "Smoke Admiral", 1150},
-            {1175, 1199, "Magma Ninja", "FireSideQuest", 1},
-            {1200, 1249, "Lava Pirate", "FireSideQuest", 2},
-            {1250, 1274, "Ship Deckhand", "ShipQuest1", 1},
-            {1275, 1299, "Ship Engineer", "ShipQuest1", 2},
-            {1300, 1324, "Ship Steward", "ShipQuest2", 1},
-            {1325, 1349, "Ship Officer", "ShipQuest2", 2},
-            {1350, 1374, "Arctic Warrior", "FrostQuest", 1},
-            {1375, 1424, "Snow Lurker", "FrostQuest", 2, "Awakened Ice Admiral", 1400},
-            {1425, 1449, "Sea Soldier", "ForgottenQuest", 1},
-            {1450, 9999, "Water Fighter", "ForgottenQuest", 2, "Tide Keeper", 1475},
-        },
-        Sea_3 = {
-            {1500, 1524, "Pirate Millionaire", "PiratePortQuest", 1},
-            {1525, 1574, "Pistol Billionaire", "PiratePortQuest", 2},
-            {1575, 1599, "Dragon Crew Warrior", "DragonCrewQuest", 1},
-            {1600, 1624, "Dragon Crew Archer", "DragonCrewQuest", 2},
-            {1625, 1649, "Hydra Enforcer", "VenomCrewQuest", 1},
-            {1650, 1699, "Venomous Assailant", "VenomCrewQuest", 2},
-            {1700, 1724, "Marine Commodore", "MarineTreeIsland", 1},
-            {1725, 1774, "Marine Rear Admiral", "MarineTreeIsland", 2},
-            {1775, 1799, "Fishman Raider", "DeepForestIsland3", 1},
-            {1800, 1824, "Fishman Captain", "DeepForestIsland3", 2},
-            {1825, 1849, "Forest Pirate", "DeepForestIsland", 1},
-            {1850, 1899, "Mythological Pirate", "DeepForestIsland", 2},
-            {1900, 1924, "Jungle Pirate", "DeepForestIsland2", 1},
-            {1925, 1974, "Musketeer Pirate", "DeepForestIsland2", 2},
-            {1975, 1999, "Reborn Skeleton", "HauntedQuest1", 1},
-            {2000, 2024, "Living Zombie", "HauntedQuest1", 2},
-            {2025, 2049, "Demonic Soul", "HauntedQuest2", 1},
-            {2050, 2074, "Posessed Mummy", "HauntedQuest2", 2},
-            {2075, 2099, "Peanut Scout", "NutsIslandQuest", 1},
-            {2100, 2124, "Peanut President", "NutsIslandQuest", 2},
-            {2125, 2149, "Ice Cream Chef", "IceCreamIslandQuest", 1},
-            {2150, 2199, "Ice Cream Commander", "IceCreamIslandQuest", 2},
-            {2200, 2224, "Cookie Crafter", "CakeQuest1", 1},
-            {2225, 2249, "Cake Guard", "CakeQuest1", 2},
-            {2250, 2274, "Baking Staff", "CakeQuest2", 1},
-            {2275, 2299, "Head Baker", "CakeQuest2", 2},
-            {2300, 2324, "Cocoa Warrior", "ChocQuest1", 1},
-            {2325, 2349, "Chocolate Bar Battler", "ChocQuest1", 2},
-            {2350, 2374, "Sweet Thief", "ChocQuest2", 1},
-            {2375, 2399, "Candy Rebel", "ChocQuest2", 2},
-            {2400, 2424, "Candy Pirate", "CandyQuest1", 1},
-            {2425, 2449, "Snow Demon", "CandyQuest1", 2},
-            {2450, 2474, "Isle Outlaw", "TikiQuest1", 1},
-            {2475, 2499, "Island Boy", "TikiQuest1", 2},
-            {2500, 2524, "Sun-kissed Warrior", "TikiQuest2", 1},
-            {2525, 2549, "Isle Champion", "TikiQuest2", 2},
-            {2550, 2574, "Serpent Hunter", "TikiQuest3", 1},
-            {2575, 2599, "Skull Slayer", "TikiQuest3", 2},
-            {2600, 2624, "Reef Bandit", "SubmergedQuest1", 1},
-            {2625, 2649, "Coral Pirate", "SubmergedQuest1", 2},
-            {2650, 2674, "Sea Chanter", "SubmergedQuest2", 1},
-            {2675, 2699, "High Disciple", "SubmergedQuest3", 1},
-            {2700, 9999, "Grand Devotee", "SubmergedQuest3", 2},
-        }
-    },
-    BossList = {
-        Sea_1 = {
-            {20, "The Gorilla King", "JungleQuest", 3, CFrame.new(-1602, 37, 153)},
-            {55, "Chief", "BuggyQuest1", 2, CFrame.new(-1140, 5, 3827)},
-            {105, "Yeti", "SnowQuest", 3, CFrame.new(1387, 87, -1298)},
-            {130, "Vice Admiral", "MarineQuest2", 2, CFrame.new(-5036, 29, 4325)},
-            {220, "Warden", "ImpelQuest", 1, CFrame.new(5192, 3, 686)},
-            {230, "Chief Warden", "ImpelQuest", 2, CFrame.new(5192, 3, 686)},
-            {240, "Swan", "ImpelQuest", 3, CFrame.new(5192, 3, 686)},
-            {350, "Magma Admiral", "MagmaQuest", 3, CFrame.new(-5315, 12, 8517)},
-            {425, "Fishman Lord", "FishmanQuest", 3, CFrame.new(61123, 18, 1569)},
-            {500, "Wysper", "SkyExp1Quest", 3, CFrame.new(-7862, 5546, -380)},
-            {575, "Thunder God", "SkyExp2Quest", 3, CFrame.new(-7903, 5636, -1411)},
-            {675, "Cyborg", "FountainQuest", 3, CFrame.new(5258, 39, 4050)},
-        },
-        Sea_2 = {
-            {750, "Diamond", "Area1Quest", 3, CFrame.new(-428, 73, 1835)},
-            {850, "Jeremy", "Area2Quest", 3, CFrame.new(637, 73, 918)},
-            {925, "Orbitus", "MarineQuest3", 3, CFrame.new(-2442, 73, -3218)},
-            {1150, "Smoke Admiral", "IceSideQuest", 3, CFrame.new(-5429, 16, -5298)},
-            {1400, "Awakened Ice Admiral", "FrostQuest", 3, CFrame.new(5669, 29, -6483)},
-            {1475, "Tide Keeper", "ForgottenQuest", 3, CFrame.new(-3054, 237, -10145)},
-        },
-        Sea_3 = {
-            {1575, "Stone", "PiratePortQuest", 3, CFrame.new(-290, 44, 5580)},
-            {1775, "Kilo Admiral", "MarineTreeIsland", 3, CFrame.new(2179, 29, -6740)},
-            {1875, "Captain Elephant", "DeepForestIsland", 3, CFrame.new(-13233, 332, -7626)},
-            {1950, "Beautiful Pirate", "DeepForestIsland2", 3, CFrame.new(-12682, 391, -9902)},
-            {2175, "Cake Queen", "IceCreamIslandQuest", 3, CFrame.new(-819, 65, -10967)},
-        }
-    },
-    MaterialEnemies = {
-        Sea_1 = {
-            ["Angel Wings"] = { "Shanda", "Royal Squad", "Royal Soldier", "Wysper", "Thunder God" },
-            ["Leather + Scrap Metal"] = { "Brute", "Pirate" },
-            ["Magma Ore"] = { "Military Soldier", "Military Spy", "Magma Admiral" },
-            ["Fish Tail"] = { "Fishman Warrior", "Fishman Commando", "Fishman Lord" },
-        },
-        Sea_2 = {
-            ["Leather + Scrap Metal"] = { "Marine Captain" },
-            ["Magma Ore"] = { "Magma Ninja", "Lava Pirate" },
-            ["Ectoplasm"] = { "Ship Deckhand", "Ship Engineer", "Ship Steward", "Ship Officer" },
-            ["Mystic Droplet"] = { "Water Fighter" },
-            ["Radioactive Material"] = { "Factory Staff" },
-            ["Vampire Fang"] = { "Vampire" },
-        },
-        Sea_3 = {
-            ["Leather + Scrap Metal"] = { "Jungle Pirate" },
-            ["Demonic Wisp"] = { "Demonic Soul" },
-            ["Fish Tail"] = { "Fishman Raider", "Fishman Captain" },
-            ["Conjured Cocoa"] = { "Chocolate Bar Battler", "Cocoa Warrior" },
-            ["Dragon Scale"] = { "Dragon Crew Archer", "Dragon Crew Warrior" },
-            ["Gunpowder"] = { "Pistol Billionaire" },
-            ["Mini Tusk"] = { "Mythological Pirate" },
-            ["Nightmare Catcher"] = { "Reborn Skeleton", "Living Zombie" },
-        }
-    },
-    Materials = {
-        Sea_1 = { "Leather + Scrap Metal", "Angel Wings", "Magma Ore", "Fish Tail" },
-        Sea_2 = { "Leather + Scrap Metal", "Radioactive Material", "Ectoplasm", "Mystic Droplet", "Magma Ore", "Vampire Fang" },
-        Sea_3 = { "Leather + Scrap Metal", "Demonic Wisp", "Conjured Cocoa", "Dragon Scale", "Gunpowder", "Fish Tail", "Mini Tusk", "Nightmare Catcher" }
-    },
-    BossNames = {
-        Sea_1 = { "The Gorilla King", "Chief", "Yeti", "Vice Admiral", "Warden", "Chief Warden", "Swan", "Magma Admiral", "Fishman Lord", "Wysper", "Thunder God", "Cyborg", "Saw" },
-        Sea_2 = { "Diamond", "Jeremy", "Orbitus", "Smoke Admiral", "Awakened Ice Admiral", "Tide Keeper", "Don Swan" },
-        Sea_3 = { "Stone", "Kilo Admiral", "Captain Elephant", "Beautiful Pirate", "Cake Queen" }
-    },
-    MeleeNames = {
-        Sea_1 = { "Black Leg", "Electro", "Fishman Karate" },
-        Sea_2 = { "Death Step", "Dragon Claw", "Sharkman Karate", "Superhuman" },
-        Sea_3 = { "Dragon Talon", "Electric Claw", "Godhuman", "Sanguine Art" }
-    },
-    Melees = {
-        ["Black Leg"] = {
-            Model = "Dark Step Teacher",
-            Npc = "Dark Step Teacher",
-            npc = "Dark Step Teacher",
-            CFrame = CFrame.new(-1147.284, 4.752, 3816.326),
-            cframe = CFrame.new(-1147.284, 4.752, 3816.326),
-            Remote = { "BuyBlackLeg" },
-            remote = { "BuyBlackLeg" },
-            Sea = 1
-        },
-        ["Electro"] = {
-            Model = "Mad Scientist",
-            Npc = "Mad Scientist",
-            npc = "Mad Scientist",
-            CFrame = CFrame.new(-4842.112, 717.670, -2623.149),
-            cframe = CFrame.new(-4842.112, 717.670, -2623.149),
-            Remote = { "BuyElectro" },
-            remote = { "BuyElectro" },
-            Sea = 1
-        },
-        ["Fishman Karate"] = {
-            Model = "Water Kung-fu Teacher",
-            Npc = "Water Kung-fu Teacher",
-            npc = "Water Kung-fu Teacher",
-            CFrame = CFrame.new(61122.652, 18.497, 1568.351),
-            cframe = CFrame.new(61122.652, 18.497, 1568.351),
-            Remote = { "BuyFishmanKarate" },
-            remote = { "BuyFishmanKarate" },
-            Sea = 1
-        },
-        ["Dragon Claw"] = {
-            Model = "Sabi",
-            Npc = "Sabi",
-            npc = "Sabi",
-            CFrame = CFrame.new(699.029, 185.661, 654.895),
-            cframe = CFrame.new(699.029, 185.661, 654.895),
-            CFrames = {
-                Sea_2 = CFrame.new(699.029, 185.661, 654.895),
-            },
-            cframes = {
-                Sea_2 = CFrame.new(699.029, 185.661, 654.895),
-            },
-            Remote = { { "BlackbeardReward", "DragonClaw", "1" }, { "BlackbeardReward", "DragonClaw", "2" } },
-            remote = { { "BlackbeardReward", "DragonClaw", "1" }, { "BlackbeardReward", "DragonClaw", "2" } },
-            Sea = 2
-        },
-        ["Superhuman"] = {
-            Model = "Martial Arts Master",
-            Npc = "Martial Arts Master",
-            npc = "Martial Arts Master",
-            CFrame = CFrame.new(1377.125, 246.542, -5189.951),
-            cframe = CFrame.new(1377.125, 246.542, -5189.951),
-            CFrames = {
-                Sea_2 = CFrame.new(1377.125, 246.542, -5189.951),
-            },
-            cframes = {
-                Sea_2 = CFrame.new(1377.125, 246.542, -5189.951),
-            },
-            Remote = { "BuySuperhuman" },
-            remote = { "BuySuperhuman" },
-            Sea = 2
-        },
-        ["Death Step"] = {
-            Model = "Phoeyu, the Reformed",
-            Npc = "Phoeyu, the Reformed",
-            npc = "Phoeyu, the Reformed",
-            CFrame = CFrame.new(6356.472, 296.100, -6762.771),
-            cframe = CFrame.new(6356.472, 296.100, -6762.771),
-            CFrames = {
-                Sea_2 = CFrame.new(6356.472, 296.100, -6762.771),
-            },
-            cframes = {
-                Sea_2 = CFrame.new(6356.472, 296.100, -6762.771),
-            },
-            Remote = { "BuyDeathStep" },
-            remote = { "BuyDeathStep" },
-            Sea = 2
-        },
-        ["Sharkman Karate"] = {
-            Model = "Sharkman Teacher",
-            Npc = "Sharkman Teacher",
-            npc = "Sharkman Teacher",
-            CFrame = CFrame.new(-2599.622, 238.198, -10315.998),
-            cframe = CFrame.new(-2599.622, 238.198, -10315.998),
-            CFrames = {
-                Sea_2 = CFrame.new(-2599.622, 238.198, -10315.998),
-            },
-            cframes = {
-                Sea_2 = CFrame.new(-2599.622, 238.198, -10315.998),
-            },
-            Remote = { "BuySharkmanKarate" },
-            remote = { "BuySharkmanKarate" },
-            Sea = 2
-        },
-        ["Electric Claw"] = {
-            Model = "Previous Hero",
-            Npc = "Previous Hero",
-            npc = "Previous Hero",
-            CFrame = CFrame.new(-10368.514, 331.788, -10134.120),
-            cframe = CFrame.new(-10368.514, 331.788, -10134.120),
-            CFrames = {
-                Sea_3 = CFrame.new(-10368.514, 331.788, -10134.120),
-            },
-            cframes = {
-                Sea_3 = CFrame.new(-10368.514, 331.788, -10134.120),
-            },
-            Remote = { "BuyElectricClaw" },
-            remote = { "BuyElectricClaw" },
-            Sea = 3
-        },
-        ["Dragon Talon"] = {
-            Model = "Uzoth",
-            Npc = "Uzoth",
-            npc = "Uzoth",
-            CFrame = CFrame.new(-9515.372, 142.130, 5535.089),
-            cframe = CFrame.new(-9515.372, 142.130, 5535.089),
-            CFrames = {
-                Sea_3 = CFrame.new(-9515.372, 142.130, 5535.089),
-            },
-            cframes = {
-                Sea_3 = CFrame.new(-9515.372, 142.130, 5535.089),
-            },
-            Remote = { "BuyDragonTalon" },
-            remote = { "BuyDragonTalon" },
-            Sea = 3
-        },
-        ["Godhuman"] = {
-            Model = "Ancient Monk",
-            Npc = "Ancient Monk",
-            npc = "Ancient Monk",
-            CFrame = CFrame.new(-12463.870, 374.910, -7523.770),
-            cframe = CFrame.new(-12463.870, 374.910, -7523.770),
-            CFrames = {
-                Sea_3 = CFrame.new(-12463.870, 374.910, -7523.770),
-            },
-            cframes = {
-                Sea_3 = CFrame.new(-12463.870, 374.910, -7523.770),
-            },
-            Remote = { "BuyGodhuman" },
-            remote = { "BuyGodhuman" },
-            Sea = 3
-        },
-        ["Sanguine Art"] = {
-            Model = "Shafi",
-            Npc = "Shafi",
-            npc = "Shafi",
-            CFrame = CFrame.new(-16548.800, 12.000, 412.300),
-            cframe = CFrame.new(-16548.800, 12.000, 412.300),
-            CFrames = {
-                Sea_3 = CFrame.new(-16548.800, 12.000, 412.300),
-            },
-            cframes = {
-                Sea_3 = CFrame.new(-16548.800, 12.000, 412.300),
-            },
-            Remote = { { "BuySanguineArt", true }, { "BuySanguineArt" } },
-            remote = { { "BuySanguineArt", true }, { "BuySanguineArt" } },
-            Sea = 3
-        },
-    },
-    ItemsToBuy = {
-        ["Frags"] = {
-            ["Race Rerol"] = { "BlackbeardReward", "Reroll", "2" },
-            ["Reset Stats"] = { "BlackbeardReward", "Refund", "2" }
-        },
-        ["Ability"] = {
-            ["Geppo"] = { "BuyHaki", "Geppo" },
-            ["Buso Haki"] = { "BuyHaki", "Buso" },
-            ["Soru"] = { "BuyHaki", "Soru" },
-            ["Observation Haki"] = { "KenTalk", "Buy" }
-        },
-        ["Gun"] = {
-            ["Slingshot"] = { "BuyItem", "Slingshot" },
-            ["Musket"] = { "BuyItem", "Musket" },
-            ["Flintlock"] = { "BuyItem", "Flintlock" },
-            ["Refined Slingshot"] = { "BuyItem", "Refined Flintlock" },
-            ["Refined Flintlock"] = { "BuyItem", "Refined Flintlock" },
-            ["Cannon"] = { "BuyItem", "Cannon" },
-            ["Kabucha"] = { "BlackbeardReward", "Slingshot", "1" },
-            ["Bizarre Rifle"] = { "Ectoplasm", "Buy", 1 }
-        },
-        ["Accessory"] = {
-            ["Black Cape"] = { "Black Cape" },
-            ["Swordsman Hat"] = { "Swordsman Hat" },
-            ["Tomoe Ring"] = { "Tomoe Ring" }
-        },
-        ["Sword"] = {
-            ["Cutlass"] = { "Cutlass" },
-            ["Katana"] = { "Katana" },
-            ["Iron Mace"] = { "Iron Mace" },
-            ["Dual Katana"] = { "Duel Katana" },
-            ["Triple Katana"] = { "Triple Katana" },
-            ["Pipe"] = { "Pipe" },
-            ["Dual-Headed Blade"] = { "Dual-Headed Blade" },
-            ["Bisento"] = { "Bisento" },
-            ["Soul Cane"] = { "Soul Cane" },
-            ["Pole v.2"] = { "ThunderGodTalk" }
-        }
-    },
-    Islands = {
-        ["Sea 1"] = {
-            ["Pirate Starter"] = CFrame.new(1047, 15, 1506),
-            ["Marine Starter"] = CFrame.new(-2728, 25, 2056),
-            ["Middle Town"] = CFrame.new(-688, 15, 1585),
-            ["Jungle"] = CFrame.new(-1614, 37, 146),
-            ["Pirate Village"] = CFrame.new(-1173, 45, 3837),
-            ["Desert"] = CFrame.new(944, 21, 4373),
-            ["Frozen Village"] = CFrame.new(1298, 87, -1344),
-            ["Marine Fortress"] = CFrame.new(-4810, 21, 4359),
-            ["Colosseum"] = CFrame.new(-1535, 7, -3014),
-            ["Lower Skylands"] = CFrame.new(-4814, 718, -2551),
-            ["Skylands"] = CFrame.new(-4652, 873, -1754),
-            ["Upper Skylands"] = CFrame.new(-7895, 5547, -380),
-            ["Prison"] = CFrame.new(4870, 6, 736),
-            ["Magma Village"] = CFrame.new(-5290, 9, 8349),
-            ["Underwater City"] = CFrame.new(61164, 5, 1820),
-            ["Fountain City"] = CFrame.new(5757, 91, 4017),
-            ["Jean-Luc Island"] = CFrame.new(-2850, 7, 5355),
-        },
-        ["Sea 2"] = {
-            ["The Cafe"] = CFrame.new(-382, 73, 290),
-            ["First Spot"] = CFrame.new(-11, 29, 2771),
-            ["Dark Arena"] = CFrame.new(3494, 13, -3259),
-            ["Don Swan Mansion"] = CFrame.new(-317, 331, 597),
-            ["Don Swan Room"] = CFrame.new(2285, 15, 905),
-            ["Green Zone"] = CFrame.new(-2258, 73, -2696),
-            ["Graveyard"] = CFrame.new(-5552, 194, -776),
-            ["Snow Mountain"] = CFrame.new(752, 408, -5277),
-            ["Hot and Cold"] = CFrame.new(-6008, 29, -5018),
-            ["Cursed Ship"] = CFrame.new(919, 125, 32869),
-            ["Ice Castle"] = CFrame.new(5505, 40, -6178),
-            ["Forgotten Island"] = CFrame.new(-3050, 240, -10178),
-            ["Remote Island"] = CFrame.new(4816, 8, 2863),
-        },
-        ["Sea 3"] = {
-            ["Mansion"] = CFrame.new(-12471, 374, -7551),
-            ["Port Town"] = CFrame.new(-340, 21, 5524),
-            ["Great Tree"] = CFrame.new(2205, 22, -6766),
-            ["Castle On The Sea"] = CFrame.new(-4980, 314, -3018),
-            ["Hydra Island"] = CFrame.new(5294, 1005, 391),
-            ["Floating Turtle"] = CFrame.new(-12528, 332, -8658),
-            ["Haunted Castle"] = CFrame.new(-9517, 142, 5528),
-            ["Ice Cream Land"] = CFrame.new(-843, 66, -10944),
-            ["Peanut Land"] = CFrame.new(-2082, 38, -10190),
-            ["Cake Land"] = CFrame.new(-1897, 14, -11576),
-            ["Candy Cane Land"] = CFrame.new(-1094, 64, -14519),
-            ["Chocolate Land"] = CFrame.new(219, 127, -12604),
-            ["Tiki Outpost"] = CFrame.new(-16224, 9, 439),
-        }
-    },
-    PortalLocations = {
-        Sea_1 = {
-            Vector3.new(-7894.62, 5545.49, -380.25),
-            Vector3.new(-4607.82, 872.54, -1667.56),
-            Vector3.new(61163.85, 11.76, 1819.78),
-            Vector3.new(3876.28, 35.11, -1939.32)
-        },
-        Sea_2 = {
-            Vector3.new(-288.46, 306.13, 598),
-            Vector3.new(2284.91, 15.15, 905.48),
-            Vector3.new(923.21, 126.98, 32852.83),
-            Vector3.new(-6508.56, 89.03, -132.84)
-        },
-        Sea_3 = {
-            Vector3.new(-5058.77, 314.52, -3155.88),
-            Vector3.new(-12463.87, 374.91, -7523.77),
-            Vector3.new(28282.57, 14896.85, 105.1),
-            Vector3.new(5661.53, 1013.09, -334.96),
-            Vector3.new(5319, 23, -93),
-            Vector3.new(5651, 1018, -350),
-            Vector3.new(28286, 14897, 103)
-        }
-    },
-    SwordData = {
-        ["Dark Blade"] = { Rarity = "Mythical", Order = 1 },
-        ["True Triple Katana"] = { Rarity = "Mythical", Order = 1 },
-        ["Cursed Dual Katana"] = { Rarity = "Mythical", Order = 1 },
-        ["Hallow Scythe"] = { Rarity = "Mythical", Order = 1 },
-        ["Triple Dark Blade"] = { Rarity = "Mythical", Order = 1 },
-        ["Dog Blade"] = { Rarity = "Mythical", Order = 1 },
+	QUESTS = {
+		Sea_1 = {
+			{1, 9, "Team-dependent", "Team-dependent", 1},
+			{10, 14, "Monkey", "JungleQuest", 1},
+			{15, 29, "Gorilla", "JungleQuest", 2, "The Gorilla King", 20},
+			{30, 39, "Pirate", "BuggyQuest1", 1},
+			{40, 59, "Brute", "BuggyQuest1", 2, "Chief", 55},
+			{60, 74, "Desert Bandit", "DesertQuest", 1},
+			{75, 89, "Desert Officer", "DesertQuest", 2},
+			{90, 99, "Snow Bandit", "SnowQuest", 1},
+			{100, 119, "Snowman", "SnowQuest", 2, "Yeti", 105},
+			{120, 149, "Chief Petty Officer", "MarineQuest2", 1, "Vice Admiral", 130},
+			{150, 174, "Sky Bandit", "SkyQuest", 1},
+			{175, 189, "Dark Master", "SkyQuest", 2},
+			{190, 209, "Prisoner", "PrisonerQuest", 1},
+			{210, 249, "Dangerous Prisoner", "PrisonerQuest", 2, {"Warden", 220, "ImpelQuest", 1}, {"Chief Warden", 230, "ImpelQuest", 2}, {"Swan", 240, "ImpelQuest", 3}},
+			{250, 274, "Toga Warrior", "ColosseumQuest", 1},
+			{275, 299, "Gladiator", "ColosseumQuest", 2},
+			{300, 324, "Military Soldier", "MagmaQuest", 1},
+			{325, 374, "Military Spy", "MagmaQuest", 2, "Magma Admiral", 350},
+			{375, 399, "Fishman Warrior", "FishmanQuest", 1},
+			{400, 449, "Fishman Commando", "FishmanQuest", 2, "Fishman Lord", 425},
+			{450, 474, "God's Guard", "SkyExp1Quest", 1},
+			{475, 524, "Shanda", "SkyExp1Quest", 2, "Wysper", 500},
+			{525, 549, "Royal Squad", "SkyExp2Quest", 1},
+			{550, 624, "Royal Soldier", "SkyExp2Quest", 2, "Thunder God", 575},
+			{625, 649, "Galley Pirate", "FountainQuest", 1},
+			{650, 9999, "Galley Captain", "FountainQuest", 2, "Cyborg", 675},
+		},
+		Sea_2 = {
+			{700, 724, "Raider", "Area1Quest", 1},
+			{725, 774, "Mercenary", "Area1Quest", 2, "Diamond", 750},
+			{775, 799, "Swan Pirate", "Area2Quest", 1},
+			{800, 874, "Factory Staff", "Area2Quest", 2, "Jeremy", 850},
+			{875, 899, "Marine Lieutenant", "MarineQuest3", 1},
+			{900, 949, "Marine Captain", "MarineQuest3", 2, "Orbitus", 925},
+			{950, 974, "Zombie", "ZombieQuest", 1},
+			{975, 999, "Vampire", "ZombieQuest", 2},
+			{1000, 1049, "Snow Trooper", "SnowMountainQuest", 1},
+			{1050, 1099, "Winter Warrior", "SnowMountainQuest", 2},
+			{1100, 1124, "Lab Subordinate", "IceSideQuest", 1},
+			{1125, 1174, "Horned Warrior", "IceSideQuest", 2, "Smoke Admiral", 1150},
+			{1175, 1199, "Magma Ninja", "FireSideQuest", 1},
+			{1200, 1249, "Lava Pirate", "FireSideQuest", 2},
+			{1250, 1274, "Ship Deckhand", "ShipQuest1", 1},
+			{1275, 1299, "Ship Engineer", "ShipQuest1", 2},
+			{1300, 1324, "Ship Steward", "ShipQuest2", 1},
+			{1325, 1349, "Ship Officer", "ShipQuest2", 2},
+			{1350, 1374, "Arctic Warrior", "FrostQuest", 1},
+			{1375, 1424, "Snow Lurker", "FrostQuest", 2, "Awakened Ice Admiral", 1400},
+			{1425, 1449, "Sea Soldier", "ForgottenQuest", 1},
+			{1450, 9999, "Water Fighter", "ForgottenQuest", 2, "Tide Keeper", 1475},
+		},
+		Sea_3 = {
+			{1500, 1524, "Pirate Millionaire", "PiratePortQuest", 1},
+			{1525, 1574, "Pistol Billionaire", "PiratePortQuest", 2},
+			{1575, 1599, "Dragon Crew Warrior", "DragonCrewQuest", 1},
+			{1600, 1624, "Dragon Crew Archer", "DragonCrewQuest", 2},
+			{1625, 1649, "Hydra Enforcer", "VenomCrewQuest", 1},
+			{1650, 1699, "Venomous Assailant", "VenomCrewQuest", 2},
+			{1700, 1724, "Marine Commodore", "MarineTreeIsland", 1},
+			{1725, 1774, "Marine Rear Admiral", "MarineTreeIsland", 2},
+			{1775, 1799, "Fishman Raider", "DeepForestIsland3", 1},
+			{1800, 1824, "Fishman Captain", "DeepForestIsland3", 2},
+			{1825, 1849, "Forest Pirate", "DeepForestIsland", 1},
+			{1850, 1899, "Mythological Pirate", "DeepForestIsland", 2},
+			{1900, 1924, "Jungle Pirate", "DeepForestIsland2", 1},
+			{1925, 1974, "Musketeer Pirate", "DeepForestIsland2", 2},
+			{1975, 1999, "Reborn Skeleton", "HauntedQuest1", 1},
+			{2000, 2024, "Living Zombie", "HauntedQuest1", 2},
+			{2025, 2049, "Demonic Soul", "HauntedQuest2", 1},
+			{2050, 2074, "Posessed Mummy", "HauntedQuest2", 2},
+			{2075, 2099, "Peanut Scout", "NutsIslandQuest", 1},
+			{2100, 2124, "Peanut President", "NutsIslandQuest", 2},
+			{2125, 2149, "Ice Cream Chef", "IceCreamIslandQuest", 1},
+			{2150, 2199, "Ice Cream Commander", "IceCreamIslandQuest", 2},
+			{2200, 2224, "Cookie Crafter", "CakeQuest1", 1},
+			{2225, 2249, "Cake Guard", "CakeQuest1", 2},
+			{2250, 2274, "Baking Staff", "CakeQuest2", 1},
+			{2275, 2299, "Head Baker", "CakeQuest2", 2},
+			{2300, 2324, "Cocoa Warrior", "ChocQuest1", 1},
+			{2325, 2349, "Chocolate Bar Battler", "ChocQuest1", 2},
+			{2350, 2374, "Sweet Thief", "ChocQuest2", 1},
+			{2375, 2399, "Candy Rebel", "ChocQuest2", 2},
+			{2400, 2424, "Candy Pirate", "CandyQuest1", 1},
+			{2425, 2449, "Snow Demon", "CandyQuest1", 2},
+			{2450, 2474, "Isle Outlaw", "TikiQuest1", 1},
+			{2475, 2499, "Island Boy", "TikiQuest1", 2},
+			{2500, 2524, "Sun-kissed Warrior", "TikiQuest2", 1},
+			{2525, 2549, "Isle Champion", "TikiQuest2", 2},
+			{2550, 2574, "Serpent Hunter", "TikiQuest3", 1},
+			{2575, 2599, "Skull Slayer", "TikiQuest3", 2},
+			{2600, 2624, "Reef Bandit", "SubmergedQuest1", 1},
+			{2625, 2649, "Coral Pirate", "SubmergedQuest1", 2},
+			{2650, 2674, "Sea Chanter", "SubmergedQuest2", 1},
+			{2675, 2699, "High Disciple", "SubmergedQuest3", 1},
+			{2700, 9999, "Grand Devotee", "SubmergedQuest3", 2},
+		}
+	},
+	BossList = {
+		Sea_1 = {
+			{20, "The Gorilla King", "JungleQuest", 3, CFrame.new(-1602, 37, 153)},
+			{55, "Chief", "BuggyQuest1", 2, CFrame.new(-1140, 5, 3827)},
+			{105, "Yeti", "SnowQuest", 3, CFrame.new(1387, 87, -1298)},
+			{130, "Vice Admiral", "MarineQuest2", 2, CFrame.new(-5036, 29, 4325)},
+			{220, "Warden", "ImpelQuest", 1, CFrame.new(5192, 3, 686)},
+			{230, "Chief Warden", "ImpelQuest", 2, CFrame.new(5192, 3, 686)},
+			{240, "Swan", "ImpelQuest", 3, CFrame.new(5192, 3, 686)},
+			{350, "Magma Admiral", "MagmaQuest", 3, CFrame.new(-5315, 12, 8517)},
+			{425, "Fishman Lord", "FishmanQuest", 3, CFrame.new(61123, 18, 1569)},
+			{500, "Wysper", "SkyExp1Quest", 3, CFrame.new(-7862, 5546, -380)},
+			{575, "Thunder God", "SkyExp2Quest", 3, CFrame.new(-7903, 5636, -1411)},
+			{675, "Cyborg", "FountainQuest", 3, CFrame.new(5258, 39, 4050)},
+		},
+		Sea_2 = {
+			{750, "Diamond", "Area1Quest", 3, CFrame.new(-428, 73, 1835)},
+			{850, "Jeremy", "Area2Quest", 3, CFrame.new(637, 73, 918)},
+			{925, "Orbitus", "MarineQuest3", 3, CFrame.new(-2442, 73, -3218)},
+			{1150, "Smoke Admiral", "IceSideQuest", 3, CFrame.new(-5429, 16, -5298)},
+			{1400, "Awakened Ice Admiral", "FrostQuest", 3, CFrame.new(5669, 29, -6483)},
+			{1475, "Tide Keeper", "ForgottenQuest", 3, CFrame.new(-3054, 237, -10145)},
+		},
+		Sea_3 = {
+			{1575, "Stone", "PiratePortQuest", 3, CFrame.new(-290, 44, 5580)},
+			{1775, "Kilo Admiral", "MarineTreeIsland", 3, CFrame.new(2179, 29, -6740)},
+			{1875, "Captain Elephant", "DeepForestIsland", 3, CFrame.new(-13233, 332, -7626)},
+			{1950, "Beautiful Pirate", "DeepForestIsland2", 3, CFrame.new(-12682, 391, -9902)},
+			{2175, "Cake Queen", "IceCreamIslandQuest", 3, CFrame.new(-819, 65, -10967)},
+		}
+	},
+	MaterialEnemies = {
+		Sea_1 = {
+			["Angel Wings"] = { "Shanda", "Royal Squad", "Royal Soldier", "Wysper", "Thunder God" },
+			["Leather + Scrap Metal"] = { "Brute", "Pirate" },
+			["Magma Ore"] = { "Military Soldier", "Military Spy", "Magma Admiral" },
+			["Fish Tail"] = { "Fishman Warrior", "Fishman Commando", "Fishman Lord" },
+		},
+		Sea_2 = {
+			["Leather + Scrap Metal"] = { "Marine Captain" },
+			["Magma Ore"] = { "Magma Ninja", "Lava Pirate" },
+			["Ectoplasm"] = { "Ship Deckhand", "Ship Engineer", "Ship Steward", "Ship Officer" },
+			["Mystic Droplet"] = { "Water Fighter" },
+			["Radioactive Material"] = { "Factory Staff" },
+			["Vampire Fang"] = { "Vampire" },
+		},
+		Sea_3 = {
+			["Leather + Scrap Metal"] = { "Jungle Pirate" },
+			["Demonic Wisp"] = { "Demonic Soul" },
+			["Fish Tail"] = { "Fishman Raider", "Fishman Captain" },
+			["Conjured Cocoa"] = { "Chocolate Bar Battler", "Cocoa Warrior" },
+			["Dragon Scale"] = { "Dragon Crew Archer", "Dragon Crew Warrior" },
+			["Gunpowder"] = { "Pistol Billionaire" },
+			["Mini Tusk"] = { "Mythological Pirate" },
+			["Nightmare Catcher"] = { "Reborn Skeleton", "Living Zombie" },
+		}
+	},
+	Materials = {
+		Sea_1 = { "Leather + Scrap Metal", "Angel Wings", "Magma Ore", "Fish Tail" },
+		Sea_2 = { "Leather + Scrap Metal", "Radioactive Material", "Ectoplasm", "Mystic Droplet", "Magma Ore", "Vampire Fang" },
+		Sea_3 = { "Leather + Scrap Metal", "Demonic Wisp", "Conjured Cocoa", "Dragon Scale", "Gunpowder", "Fish Tail", "Mini Tusk", "Nightmare Catcher" }
+	},
+	BossNames = {
+		Sea_1 = { "The Gorilla King", "Chief", "Yeti", "Vice Admiral", "Warden", "Chief Warden", "Swan", "Magma Admiral", "Fishman Lord", "Wysper", "Thunder God", "Cyborg", "Saw" },
+		Sea_2 = { "Diamond", "Jeremy", "Orbitus", "Smoke Admiral", "Awakened Ice Admiral", "Tide Keeper", "Don Swan" },
+		Sea_3 = { "Stone", "Kilo Admiral", "Captain Elephant", "Beautiful Pirate", "Cake Queen" }
+	},
+	MeleeNames = {
+		Sea_1 = { "Black Leg", "Electro", "Fishman Karate" },
+		Sea_2 = { "Death Step", "Dragon Claw", "Sharkman Karate", "Superhuman" },
+		Sea_3 = { "Dragon Talon", "Electric Claw", "Godhuman", "Sanguine Art" }
+	},
+	Melees = {
+		["Black Leg"] = {
+			Model = "Dark Step Teacher",
+			Npc = "Dark Step Teacher",
+			npc = "Dark Step Teacher",
+			CFrame = CFrame.new(-1147.284, 4.752, 3816.326),
+			cframe = CFrame.new(-1147.284, 4.752, 3816.326),
+			Remote = { "BuyBlackLeg" },
+			remote = { "BuyBlackLeg" },
+			Sea = 1
+		},
+		["Electro"] = {
+			Model = "Mad Scientist",
+			Npc = "Mad Scientist",
+			npc = "Mad Scientist",
+			CFrame = CFrame.new(-4842.112, 717.670, -2623.149),
+			cframe = CFrame.new(-4842.112, 717.670, -2623.149),
+			Remote = { "BuyElectro" },
+			remote = { "BuyElectro" },
+			Sea = 1
+		},
+		["Fishman Karate"] = {
+			Model = "Water Kung-fu Teacher",
+			Npc = "Water Kung-fu Teacher",
+			npc = "Water Kung-fu Teacher",
+			CFrame = CFrame.new(61122.652, 18.497, 1568.351),
+			cframe = CFrame.new(61122.652, 18.497, 1568.351),
+			Remote = { "BuyFishmanKarate" },
+			remote = { "BuyFishmanKarate" },
+			Sea = 1
+		},
+		["Dragon Claw"] = {
+			Model = "Sabi",
+			Npc = "Sabi",
+			npc = "Sabi",
+			CFrame = CFrame.new(699.029, 185.661, 654.895),
+			cframe = CFrame.new(699.029, 185.661, 654.895),
+			CFrames = {
+				Sea_2 = CFrame.new(699.029, 185.661, 654.895),
+			},
+			cframes = {
+				Sea_2 = CFrame.new(699.029, 185.661, 654.895),
+			},
+			Remote = { { "BlackbeardReward", "DragonClaw", "1" }, { "BlackbeardReward", "DragonClaw", "2" } },
+			remote = { { "BlackbeardReward", "DragonClaw", "1" }, { "BlackbeardReward", "DragonClaw", "2" } },
+			Sea = 2
+		},
+		["Superhuman"] = {
+			Model = "Martial Arts Master",
+			Npc = "Martial Arts Master",
+			npc = "Martial Arts Master",
+			CFrame = CFrame.new(1377.125, 246.542, -5189.951),
+			cframe = CFrame.new(1377.125, 246.542, -5189.951),
+			CFrames = {
+				Sea_2 = CFrame.new(1377.125, 246.542, -5189.951),
+			},
+			cframes = {
+				Sea_2 = CFrame.new(1377.125, 246.542, -5189.951),
+			},
+			Remote = { "BuySuperhuman" },
+			remote = { "BuySuperhuman" },
+			Sea = 2
+		},
+		["Death Step"] = {
+			Model = "Phoeyu, the Reformed",
+			Npc = "Phoeyu, the Reformed",
+			npc = "Phoeyu, the Reformed",
+			CFrame = CFrame.new(6356.472, 296.100, -6762.771),
+			cframe = CFrame.new(6356.472, 296.100, -6762.771),
+			CFrames = {
+				Sea_2 = CFrame.new(6356.472, 296.100, -6762.771),
+			},
+			cframes = {
+				Sea_2 = CFrame.new(6356.472, 296.100, -6762.771),
+			},
+			Remote = { "BuyDeathStep" },
+			remote = { "BuyDeathStep" },
+			Sea = 2
+		},
+		["Sharkman Karate"] = {
+			Model = "Sharkman Teacher",
+			Npc = "Sharkman Teacher",
+			npc = "Sharkman Teacher",
+			CFrame = CFrame.new(-2599.622, 238.198, -10315.998),
+			cframe = CFrame.new(-2599.622, 238.198, -10315.998),
+			CFrames = {
+				Sea_2 = CFrame.new(-2599.622, 238.198, -10315.998),
+			},
+			cframes = {
+				Sea_2 = CFrame.new(-2599.622, 238.198, -10315.998),
+			},
+			Remote = { "BuySharkmanKarate" },
+			remote = { "BuySharkmanKarate" },
+			Sea = 2
+		},
+		["Electric Claw"] = {
+			Model = "Previous Hero",
+			Npc = "Previous Hero",
+			npc = "Previous Hero",
+			CFrame = CFrame.new(-10368.514, 331.788, -10134.120),
+			cframe = CFrame.new(-10368.514, 331.788, -10134.120),
+			CFrames = {
+				Sea_3 = CFrame.new(-10368.514, 331.788, -10134.120),
+			},
+			cframes = {
+				Sea_3 = CFrame.new(-10368.514, 331.788, -10134.120),
+			},
+			Remote = { "BuyElectricClaw" },
+			remote = { "BuyElectricClaw" },
+			Sea = 3
+		},
+		["Dragon Talon"] = {
+			Model = "Uzoth",
+			Npc = "Uzoth",
+			npc = "Uzoth",
+			CFrame = CFrame.new(-9515.372, 142.130, 5535.089),
+			cframe = CFrame.new(-9515.372, 142.130, 5535.089),
+			CFrames = {
+				Sea_3 = CFrame.new(-9515.372, 142.130, 5535.089),
+			},
+			cframes = {
+				Sea_3 = CFrame.new(-9515.372, 142.130, 5535.089),
+			},
+			Remote = { "BuyDragonTalon" },
+			remote = { "BuyDragonTalon" },
+			Sea = 3
+		},
+		["Godhuman"] = {
+			Model = "Ancient Monk",
+			Npc = "Ancient Monk",
+			npc = "Ancient Monk",
+			CFrame = CFrame.new(-12463.870, 374.910, -7523.770),
+			cframe = CFrame.new(-12463.870, 374.910, -7523.770),
+			CFrames = {
+				Sea_3 = CFrame.new(-12463.870, 374.910, -7523.770),
+			},
+			cframes = {
+				Sea_3 = CFrame.new(-12463.870, 374.910, -7523.770),
+			},
+			Remote = { "BuyGodhuman" },
+			remote = { "BuyGodhuman" },
+			Sea = 3
+		},
+		["Sanguine Art"] = {
+			Model = "Shafi",
+			Npc = "Shafi",
+			npc = "Shafi",
+			CFrame = CFrame.new(-16548.800, 12.000, 412.300),
+			cframe = CFrame.new(-16548.800, 12.000, 412.300),
+			CFrames = {
+				Sea_3 = CFrame.new(-16548.800, 12.000, 412.300),
+			},
+			cframes = {
+				Sea_3 = CFrame.new(-16548.800, 12.000, 412.300),
+			},
+			Remote = { { "BuySanguineArt", true }, { "BuySanguineArt" } },
+			remote = { { "BuySanguineArt", true }, { "BuySanguineArt" } },
+			Sea = 3
+		},
+	},
+	ItemsToBuy = {
+		["Frags"] = {
+			["Race Rerol"] = { "BlackbeardReward", "Reroll", "2" },
+			["Reset Stats"] = { "BlackbeardReward", "Refund", "2" }
+		},
+		["Ability"] = {
+			["Geppo"] = { "BuyHaki", "Geppo" },
+			["Buso Haki"] = { "BuyHaki", "Buso" },
+			["Soru"] = { "BuyHaki", "Soru" },
+			["Observation Haki"] = { "KenTalk", "Buy" }
+		},
+		["Gun"] = {
+			["Slingshot"] = { "BuyItem", "Slingshot" },
+			["Musket"] = { "BuyItem", "Musket" },
+			["Flintlock"] = { "BuyItem", "Flintlock" },
+			["Refined Slingshot"] = { "BuyItem", "Refined Flintlock" },
+			["Refined Flintlock"] = { "BuyItem", "Refined Flintlock" },
+			["Cannon"] = { "BuyItem", "Cannon" },
+			["Kabucha"] = { "BlackbeardReward", "Slingshot", "1" },
+			["Bizarre Rifle"] = { "Ectoplasm", "Buy", 1 }
+		},
+		["Accessory"] = {
+			["Black Cape"] = { "Black Cape" },
+			["Swordsman Hat"] = { "Swordsman Hat" },
+			["Tomoe Ring"] = { "Tomoe Ring" }
+		},
+		["Sword"] = {
+			["Cutlass"] = { "Cutlass" },
+			["Katana"] = { "Katana" },
+			["Iron Mace"] = { "Iron Mace" },
+			["Dual Katana"] = { "Duel Katana" },
+			["Triple Katana"] = { "Triple Katana" },
+			["Pipe"] = { "Pipe" },
+			["Dual-Headed Blade"] = { "Dual-Headed Blade" },
+			["Bisento"] = { "Bisento" },
+			["Soul Cane"] = { "Soul Cane" },
+			["Pole v.2"] = { "ThunderGodTalk" }
+		}
+	},
+	Islands = {
+		["Sea 1"] = {
+			["Pirate Starter"] = CFrame.new(1047, 15, 1506),
+			["Marine Starter"] = CFrame.new(-2728, 25, 2056),
+			["Middle Town"] = CFrame.new(-688, 15, 1585),
+			["Jungle"] = CFrame.new(-1614, 37, 146),
+			["Pirate Village"] = CFrame.new(-1173, 45, 3837),
+			["Desert"] = CFrame.new(944, 21, 4373),
+			["Frozen Village"] = CFrame.new(1298, 87, -1344),
+			["Marine Fortress"] = CFrame.new(-4810, 21, 4359),
+			["Colosseum"] = CFrame.new(-1535, 7, -3014),
+			["Lower Skylands"] = CFrame.new(-4814, 718, -2551),
+			["Skylands"] = CFrame.new(-4652, 873, -1754),
+			["Upper Skylands"] = CFrame.new(-7895, 5547, -380),
+			["Prison"] = CFrame.new(4870, 6, 736),
+			["Magma Village"] = CFrame.new(-5290, 9, 8349),
+			["Underwater City"] = CFrame.new(61164, 5, 1820),
+			["Fountain City"] = CFrame.new(5757, 91, 4017),
+			["Jean-Luc Island"] = CFrame.new(-2850, 7, 5355),
+		},
+		["Sea 2"] = {
+			["The Cafe"] = CFrame.new(-382, 73, 290),
+			["First Spot"] = CFrame.new(-11, 29, 2771),
+			["Dark Arena"] = CFrame.new(3494, 13, -3259),
+			["Don Swan Mansion"] = CFrame.new(-317, 331, 597),
+			["Don Swan Room"] = CFrame.new(2285, 15, 905),
+			["Green Zone"] = CFrame.new(-2258, 73, -2696),
+			["Graveyard"] = CFrame.new(-5552, 194, -776),
+			["Snow Mountain"] = CFrame.new(752, 408, -5277),
+			["Hot and Cold"] = CFrame.new(-6008, 29, -5018),
+			["Cursed Ship"] = CFrame.new(919, 125, 32869),
+			["Ice Castle"] = CFrame.new(5505, 40, -6178),
+			["Forgotten Island"] = CFrame.new(-3050, 240, -10178),
+			["Remote Island"] = CFrame.new(4816, 8, 2863),
+		},
+		["Sea 3"] = {
+			["Mansion"] = CFrame.new(-12471, 374, -7551),
+			["Port Town"] = CFrame.new(-340, 21, 5524),
+			["Great Tree"] = CFrame.new(2205, 22, -6766),
+			["Castle On The Sea"] = CFrame.new(-4980, 314, -3018),
+			["Hydra Island"] = CFrame.new(5294, 1005, 391),
+			["Floating Turtle"] = CFrame.new(-12528, 332, -8658),
+			["Haunted Castle"] = CFrame.new(-9517, 142, 5528),
+			["Ice Cream Land"] = CFrame.new(-843, 66, -10944),
+			["Peanut Land"] = CFrame.new(-2082, 38, -10190),
+			["Cake Land"] = CFrame.new(-1897, 14, -11576),
+			["Candy Cane Land"] = CFrame.new(-1094, 64, -14519),
+			["Chocolate Land"] = CFrame.new(219, 127, -12604),
+			["Tiki Outpost"] = CFrame.new(-16224, 9, 439),
+		}
+	},
+	PortalLocations = {
+		Sea_1 = {
+			Vector3.new(-7894.62, 5545.49, -380.25),
+			Vector3.new(-4607.82, 872.54, -1667.56),
+			Vector3.new(61163.85, 11.76, 1819.78),
+			Vector3.new(3876.28, 35.11, -1939.32)
+		},
+		Sea_2 = {
+			Vector3.new(-288.46, 306.13, 598),
+			Vector3.new(2284.91, 15.15, 905.48),
+			Vector3.new(923.21, 126.98, 32852.83),
+			Vector3.new(-6508.56, 89.03, -132.84)
+		},
+		Sea_3 = {
+			Vector3.new(-5058.77, 314.52, -3155.88),
+			Vector3.new(-12463.87, 374.91, -7523.77),
+			Vector3.new(28282.57, 14896.85, 105.1),
+			Vector3.new(5661.53, 1013.09, -334.96),
+			Vector3.new(5319, 23, -93),
+			Vector3.new(5651, 1018, -350),
+			Vector3.new(28286, 14897, 103)
+		}
+	},
+	SwordData = {
+		["Dark Blade"] = { Rarity = "Mythical", Order = 1 },
+		["True Triple Katana"] = { Rarity = "Mythical", Order = 1 },
+		["Cursed Dual Katana"] = { Rarity = "Mythical", Order = 1 },
+		["Hallow Scythe"] = { Rarity = "Mythical", Order = 1 },
+		["Triple Dark Blade"] = { Rarity = "Mythical", Order = 1 },
+		["Dog Blade"] = { Rarity = "Mythical", Order = 1 },
 
-        ["Rengoku"] = { Rarity = "Legendary", Order = 2 },
-        ["Yama"] = { Rarity = "Legendary", Order = 2 },
-        ["Tushita"] = { Rarity = "Legendary", Order = 2 },
-        ["Buddy Sword"] = { Rarity = "Legendary", Order = 2 },
-        ["Shark Anchor"] = { Rarity = "Legendary", Order = 2 },
-        ["Fox Lamp"] = { Rarity = "Legendary", Order = 2 },
-        ["Dragon Trident"] = { Rarity = "Legendary", Order = 2 },
-        ["Saber"] = { Rarity = "Legendary", Order = 2 },
-        ["Canvander"] = { Rarity = "Legendary", Order = 2 },
-        ["Dark Dagger"] = { Rarity = "Legendary", Order = 2 },
-        ["Dragonheart"] = { Rarity = "Legendary", Order = 2 },
-        ["Koko"] = { Rarity = "Legendary", Order = 2 },
-        ["Midnight Blade"] = { Rarity = "Legendary", Order = 2 },
-        ["Oroshi"] = { Rarity = "Legendary", Order = 2 },
-        ["Pole (1st Form)"] = { Rarity = "Legendary", Order = 2 },
-        ["Pole (2nd Form)"] = { Rarity = "Legendary", Order = 2 },
-        ["Saishi"] = { Rarity = "Legendary", Order = 2 },
-        ["Shizu"] = { Rarity = "Legendary", Order = 2 },
-        ["Longsword"] = { Rarity = "Legendary", Order = 2 },
-        ["Pipe"] = { Rarity = "Legendary", Order = 2 },
-        ["Soul Cane"] = { Rarity = "Legendary", Order = 2 },
-        ["Trident"] = { Rarity = "Legendary", Order = 2 },
-        ["Wardens Sword"] = { Rarity = "Legendary", Order = 2 },
-        ["Bisento"] = { Rarity = "Legendary", Order = 2 },
-        ["Triple Katana"] = { Rarity = "Legendary", Order = 2 },
-        ["Twin Hooks"] = { Rarity = "Legendary", Order = 2 },
-        ["Dual-Headed Blade"] = { Rarity = "Legendary", Order = 2 },
-        ["Flail"] = { Rarity = "Legendary", Order = 2 },
-        ["Gravity Blade"] = { Rarity = "Legendary", Order = 2 },
+		["Rengoku"] = { Rarity = "Legendary", Order = 2 },
+		["Yama"] = { Rarity = "Legendary", Order = 2 },
+		["Tushita"] = { Rarity = "Legendary", Order = 2 },
+		["Buddy Sword"] = { Rarity = "Legendary", Order = 2 },
+		["Shark Anchor"] = { Rarity = "Legendary", Order = 2 },
+		["Fox Lamp"] = { Rarity = "Legendary", Order = 2 },
+		["Dragon Trident"] = { Rarity = "Legendary", Order = 2 },
+		["Saber"] = { Rarity = "Legendary", Order = 2 },
+		["Canvander"] = { Rarity = "Legendary", Order = 2 },
+		["Dark Dagger"] = { Rarity = "Legendary", Order = 2 },
+		["Dragonheart"] = { Rarity = "Legendary", Order = 2 },
+		["Koko"] = { Rarity = "Legendary", Order = 2 },
+		["Midnight Blade"] = { Rarity = "Legendary", Order = 2 },
+		["Oroshi"] = { Rarity = "Legendary", Order = 2 },
+		["Pole (1st Form)"] = { Rarity = "Legendary", Order = 2 },
+		["Pole (2nd Form)"] = { Rarity = "Legendary", Order = 2 },
+		["Saishi"] = { Rarity = "Legendary", Order = 2 },
+		["Shizu"] = { Rarity = "Legendary", Order = 2 },
+		["Longsword"] = { Rarity = "Legendary", Order = 2 },
+		["Pipe"] = { Rarity = "Legendary", Order = 2 },
+		["Soul Cane"] = { Rarity = "Legendary", Order = 2 },
+		["Trident"] = { Rarity = "Legendary", Order = 2 },
+		["Wardens Sword"] = { Rarity = "Legendary", Order = 2 },
+		["Bisento"] = { Rarity = "Legendary", Order = 2 },
+		["Triple Katana"] = { Rarity = "Legendary", Order = 2 },
+		["Twin Hooks"] = { Rarity = "Legendary", Order = 2 },
+		["Dual-Headed Blade"] = { Rarity = "Legendary", Order = 2 },
+		["Flail"] = { Rarity = "Legendary", Order = 2 },
+		["Gravity Blade"] = { Rarity = "Legendary", Order = 2 },
 
-        ["Spikey Trident"] = { Rarity = "Rare", Order = 3 },
-        ["Fishing Trophy"] = { Rarity = "Rare", Order = 3 },
-        ["Shark Saw"] = { Rarity = "Rare", Order = 3 },
+		["Spikey Trident"] = { Rarity = "Rare", Order = 3 },
+		["Fishing Trophy"] = { Rarity = "Rare", Order = 3 },
+		["Shark Saw"] = { Rarity = "Rare", Order = 3 },
 
-        ["Iron Mace"] = { Rarity = "Uncommon", Order = 4 },
+		["Iron Mace"] = { Rarity = "Uncommon", Order = 4 },
 
-        ["Cutlass"] = { Rarity = "Common", Order = 5 },
-        ["Katana"] = { Rarity = "Common", Order = 5 },
-        ["Dual Katana"] = { Rarity = "Common", Order = 5 },
-    },
-    BoatsList = {
-        'Dinghy',
-        'PirateSloop',
-        'PirateBrigade',
-        'PirateGrandBrigade',
-        'MarineSloop',
-        'MarineBrigade',
-        'MarineGrandBrigade',
-        'Beast Hunter',
-        'Lantern',
-        'Guardian',
-        'Grand Brigade',
-        'Sloop',
-        'The Sentinel'
-    },
-    ZoneList = {
-        'Level 1',
-        'Level 2',
-        'Level 3',
-        'Level 4',
-        'Level 5',
-        'Level 6',
-        'Infinite'
-    },
-    SeaEventTargets = {
-        "Terror Shark",
-        "Sea Beast",
-        "Shark",
-        "Piranha",
-        "Fish Crew Member",
-        "Pirate Brigade",
-        "Pirate Grand Brigade",
-        "Ghost Ship"
-    },
-    RodsList = {
-        "Fishing Rod",
-        "Gold Rod",
-        "Shark Rod",
-        "Shell Rod",
-        "Treasure Rod",
-        "Shark (Corrupted)",
-        "Shell (Celestial)"
-    },
-    BaitsList = {
-        "Basic Bait",
-        "Kelp Bait",
-        "Good Bait",
-        "Abyssal Bait",
-        "Frozen Bait",
-        "Epic Bait",
-        "Carnivore Bait"
-    },
-    DungeonCards = {
-        "Hyper",
-        "Overflow",
-        "Fortress",
-        "Shadow",
-        "Sniper",
-        "Lifesteal",
-        "Unbreakable",
-        "Health",
-        "Defense",
-        "Armor",
-        "Melee",
-        "Sword",
-        "Fruit",
-        "Gun"
-    },
-    TrainMethods = {
-        "Bones",
-        "Cakes"
-    },
-    LegendarySwordNames = {
-        "Shizu",
-        "Oroshi",
-        "Saishi"
-    },
-    BossHopNames = {
-        "Greybeard",
-        "Darkbeard",
-        "Cursed Captain",
-        "rip_indra True Form",
-        "Soul Reaper",
-        "Cake Prince",
-        "Dough King",
-        "Tyrant of the Skies"
-    },
-    BossMap = {
-        ["Greybeard"] = "Greybeard",
-        ["Darkbeard"] = "Darkbeard",
-        ["Cursed Captain"] = "CursedCaptain",
-        ["rip_indra True Form"] = "Ripindra",
-        ["Soul Reaper"] = "SoulReaper",
-        ["Cake Prince"] = "CakePrince",
-        ["Dough King"] = "DoughKing",
-        ["Tyrant of the Skies"] = "Tyrant"
-    },
-    ScrollList = {
-        "Common Scroll",
-        "Rare Scroll",
-        "Legendary Scroll",
-        "Mythical Scroll"
-    },
-    ChestTiers = {
-        "Diamond",
-        "Gold",
-        "Silver"
-    },
-    IgnoreNPC = {
-        "Quest",
-        "Boat",
-        "Home"
-    },
-    DracoSequence = {
-        "Relic1",
-        "EndRelic1",
-        "Relic2",
-        "EndRelic2",
-        "Relic3",
-        "EndRelic3"
-    },
-    SwordList = {
-        "Shizu",
-        "Saishi",
-        "Oroshi"
-    },
-    DealerFruitList = {
-        "Rocket-Rocket",
-        "Spin-Spin",
-        "Blade-Blade",
-        "Spring-Spring",
-        "Bomb-Bomb",
-        "Smoke-Smoke",
-        "Spike-Spike",
-        "Flame-Flame",
-        "Ice-Ice",
-        "Sand-Sand",
-        "Dark-Dark",
-        "Eagle-Eagle",
-        "Diamond-Diamond",
-        "Light-Light",
-        "Rubber-Rubber",
-        "Ghost-Ghost",
-        "Magma-Magma",
-        "Quake-Quake",
-        "Buddha-Buddha",
-        "Love-Love",
-        "Creation-Creation",
-        "Spider-Spider",
-        "Sound-Sound",
-        "Phoenix-Phoenix",
-        "Portal-Portal",
-        "Lightning-Lightning",
-        "Pain-Pain",
-        "Blizzard-Blizzard",
-        "Gravity-Gravity",
-        "Mammoth-Mammoth",
-        "T-Rex-T-Rex",
-        "Dough-Dough",
-        "Shadow-Shadow",
-        "Venom-Venom",
-        "Gas-Gas",
-        "Spirit-Spirit",
-        "Tiger-Tiger",
-        "Yeti-Yeti",
-        "Kitsune-Kitsune",
-        "Control-Control",
-        "Dragon-Dragon"
-    }
+		["Cutlass"] = { Rarity = "Common", Order = 5 },
+		["Katana"] = { Rarity = "Common", Order = 5 },
+		["Dual Katana"] = { Rarity = "Common", Order = 5 },
+	},
+	BoatsList = {
+		'Dinghy',
+		'PirateSloop',
+		'PirateBrigade',
+		'PirateGrandBrigade',
+		'MarineSloop',
+		'MarineBrigade',
+		'MarineGrandBrigade',
+		'Beast Hunter',
+		'Lantern',
+		'Guardian',
+		'Grand Brigade',
+		'Sloop',
+		'The Sentinel'
+	},
+	ZoneList = {
+		'Level 1',
+		'Level 2',
+		'Level 3',
+		'Level 4',
+		'Level 5',
+		'Level 6',
+		'Infinite'
+	},
+	SeaEventTargets = {
+		"Terror Shark",
+		"Sea Beast",
+		"Shark",
+		"Piranha",
+		"Fish Crew Member",
+		"Pirate Brigade",
+		"Pirate Grand Brigade",
+		"Ghost Ship"
+	},
+	RodsList = {
+		"Fishing Rod",
+		"Gold Rod",
+		"Shark Rod",
+		"Shell Rod",
+		"Treasure Rod",
+		"Shark (Corrupted)",
+		"Shell (Celestial)"
+	},
+	BaitsList = {
+		"Basic Bait",
+		"Kelp Bait",
+		"Good Bait",
+		"Abyssal Bait",
+		"Frozen Bait",
+		"Epic Bait",
+		"Carnivore Bait"
+	},
+	DungeonCards = {
+		"Hyper",
+		"Overflow",
+		"Fortress",
+		"Shadow",
+		"Sniper",
+		"Lifesteal",
+		"Unbreakable",
+		"Health",
+		"Defense",
+		"Armor",
+		"Melee",
+		"Sword",
+		"Fruit",
+		"Gun"
+	},
+	TrainMethods = {
+		"Bones",
+		"Cakes"
+	},
+	LegendarySwordNames = {
+		"Shizu",
+		"Oroshi",
+		"Saishi"
+	},
+	BossHopNames = {
+		"Greybeard",
+		"Darkbeard",
+		"Cursed Captain",
+		"rip_indra True Form",
+		"Soul Reaper",
+		"Cake Prince",
+		"Dough King",
+		"Tyrant of the Skies"
+	},
+	BossMap = {
+		["Greybeard"] = "Greybeard",
+		["Darkbeard"] = "Darkbeard",
+		["Cursed Captain"] = "CursedCaptain",
+		["rip_indra True Form"] = "Ripindra",
+		["Soul Reaper"] = "SoulReaper",
+		["Cake Prince"] = "CakePrince",
+		["Dough King"] = "DoughKing",
+		["Tyrant of the Skies"] = "Tyrant"
+	},
+	ScrollList = {
+		"Common Scroll",
+		"Rare Scroll",
+		"Legendary Scroll",
+		"Mythical Scroll"
+	},
+	ChestTiers = {
+		"Diamond",
+		"Gold",
+		"Silver"
+	},
+	IgnoreNPC = {
+		"Quest",
+		"Boat",
+		"Home"
+	},
+	DracoSequence = {
+		"Relic1",
+		"EndRelic1",
+		"Relic2",
+		"EndRelic2",
+		"Relic3",
+		"EndRelic3"
+	},
+	SwordList = {
+		"Shizu",
+		"Saishi",
+		"Oroshi"
+	},
+	DealerFruitList = {
+		"Rocket-Rocket",
+		"Spin-Spin",
+		"Blade-Blade",
+		"Spring-Spring",
+		"Bomb-Bomb",
+		"Smoke-Smoke",
+		"Spike-Spike",
+		"Flame-Flame",
+		"Ice-Ice",
+		"Sand-Sand",
+		"Dark-Dark",
+		"Eagle-Eagle",
+		"Diamond-Diamond",
+		"Light-Light",
+		"Rubber-Rubber",
+		"Ghost-Ghost",
+		"Magma-Magma",
+		"Quake-Quake",
+		"Buddha-Buddha",
+		"Love-Love",
+		"Creation-Creation",
+		"Spider-Spider",
+		"Sound-Sound",
+		"Phoenix-Phoenix",
+		"Portal-Portal",
+		"Lightning-Lightning",
+		"Pain-Pain",
+		"Blizzard-Blizzard",
+		"Gravity-Gravity",
+		"Mammoth-Mammoth",
+		"T-Rex-T-Rex",
+		"Dough-Dough",
+		"Shadow-Shadow",
+		"Venom-Venom",
+		"Gas-Gas",
+		"Spirit-Spirit",
+		"Tiger-Tiger",
+		"Yeti-Yeti",
+		"Kitsune-Kitsune",
+		"Control-Control",
+		"Dragon-Dragon"
+	}
 }
 
 function hoangtuveu()
@@ -820,13 +823,26 @@ function hoangtuveu()
     containerLayout.FillDirection = Enum.FillDirection.Vertical
     containerLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
+    local discordLabel = Instance.new("TextLabel")
+    discordLabel.Name = "DiscordLabel"
+    discordLabel.Parent = container
+    discordLabel.LayoutOrder = 1
+    discordLabel.AutomaticSize = Enum.AutomaticSize.XY
+    discordLabel.Size = UDim2.new(0, 0, 0, 0)
+    discordLabel.BackgroundTransparency = 1
+    discordLabel.Text = "BombaCat Hub"
+    discordLabel.TextSize = 13
+    discordLabel.Font = Enum.Font.Highway
+    discordLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+    discordLabel.TextXAlignment = Enum.TextXAlignment.Center
+
     local frame = Instance.new("Frame")
     frame.Name = "Frame"
     frame.Parent = container
     frame.LayoutOrder = 2
     frame.AutomaticSize = Enum.AutomaticSize.XY
     frame.Size = UDim2.new(0, 0, 0, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(38, 5, 25)
+    frame.BackgroundColor3 = Color3.fromRGB(38, 30, 5)
     frame.BackgroundTransparency = 0.25
     frame.BorderSizePixel = 0
 
@@ -839,7 +855,7 @@ function hoangtuveu()
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
 
     local stroke = Instance.new("UIStroke", frame)
-    stroke.Color = Color3.fromRGB(255, 255, 0)
+    stroke.Color = Color3.fromRGB(255, 200, 0)
     stroke.Thickness = 1.5
     stroke.Transparency = 0
 
@@ -871,7 +887,7 @@ function hoangtuveu()
     taskLabel.Text = "Status :"
     taskLabel.TextSize = 14
     taskLabel.Font = Enum.Font.Ubuntu
-    taskLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+    taskLabel.TextColor3 = Color3.fromRGB(255, 230, 150)
     taskLabel.TextXAlignment = Enum.TextXAlignment.Left
 
     local subTaskLabel = Instance.new("TextLabel")
@@ -884,7 +900,7 @@ function hoangtuveu()
     subTaskLabel.Text = "Sub Task :"
     subTaskLabel.TextSize = 13
     subTaskLabel.Font = Enum.Font.Ubuntu
-    subTaskLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+    subTaskLabel.TextColor3 = Color3.fromRGB(255, 230, 150)
     subTaskLabel.TextTransparency = 0
     subTaskLabel.TextXAlignment = Enum.TextXAlignment.Left
 
@@ -1434,12 +1450,18 @@ end
 
     -- [UPDATED] Đổi tốc độ theo bản boss man đưa: 0.01s / 20° (mượt hơn
     -- bản cũ 0.4s / 80°, xoay liên tục thay vì giật cục)
+    -- [FIXED v2] Órbita por TEMPO (graus/segundo) em vez de +20° por frame.
+    -- Antes o alvo rodava ~1200°/s e saltava ~14 studs por frame: o voo
+    -- tentava perseguir um ponto que mudava de lado a cada frame → "pára e
+    -- volta". Agora roda a Config.OrbitDegPerSec (def. 120°/s) e sem
+    -- arredondar a posição, para o personagem conseguir acompanhar.
     CaculateCircreDirection = function(a)
-        if W_angle > 50000 then W_angle = 60 end
-        W_angle = W_angle + ((tick() - lastChange) > 0.01 and 20 or 0)
-        if tick() - lastChange > 0.01 then lastChange = tick() end
+        local now = tick()
+        local deg = Config.OrbitDegPerSec or 120
+        W_angle = (W_angle + deg * math.min(now - lastChange, 0.1)) % 360
+        lastChange = now
         local h = a + Vector3.new(math.cos(math.rad(W_angle)) * 40, 0, math.sin(math.rad(W_angle)) * 40)
-        return CFrame.new(RoundVector3Down(h.p))
+        return CFrame.new(h.p)
     end
 
     function GetMonAsSortedRange()
@@ -1649,46 +1671,126 @@ end
         local blockfind = workspace:FindFirstChild(block.Name)
         if blockfind and blockfind ~= block then blockfind:Destroy() end
     end
-    task.spawn(function()
-        while task.wait() do
-            if block and block.Parent == workspace then
-                getgenv().OnFarm = shouldTween and true or false
-            else
-                getgenv().OnFarm = false
+    -- ============================================================
+    -- [NEW v2] FLY CONTROLLER — voo contínuo e fluido
+    -- Problemas do tween antigo (Create chamado a cada frame):
+    --  1) cada chamada cancelava e recriava o tween → arranques/paragens;
+    --  2) ao chegar, shouldTween=false largava o personagem do "block"
+    --     (colisões + gravidade) e o frame seguinte voltava a prendê-lo;
+    --  3) se o servidor puxava o personagem >200 studs, o block era
+    --     re-sincronizado para trás ("loopback") sem qualquer ajuste;
+    --  4) GetDescendants() + CanCollide em TODAS as chamadas = FPS a cair.
+    -- Agora: UM loop no Heartbeat move o block em direção a FlyCtl.Goal a
+    -- velocidade constante (dt-based). Create() só actualiza o alvo.
+    -- Se detectar rubber-band, reduz a velocidade sozinho e recupera depois.
+    -- Config opcional: FlySpeed (def. 200), FlySpeedMax (def. 260, só em
+    -- distâncias longas), OrbitDegPerSec (def. 120).
+    -- ============================================================
+    FlyCtl = {
+        Goal = nil, LastCall = 0, MaxAge = 10, Active = false,
+        Penalty = 1, PenaltyUntil = 0, LastSet = nil, LastBackoff = 0, WasOn = false,
+    }
+    function FlyCtl.SpeedFor(dist)
+        local base = Config.FlySpeed or 200
+        local maxs = Config.FlySpeedMax or 260
+        local t = math.clamp((dist - 600) / 2400, 0, 1)
+        return (base + (maxs - base) * t) * FlyCtl.Penalty
+    end
+    function FlyCtl.SetGoal(cf)
+        FlyCtl.Goal = cf
+        FlyCtl.LastCall = tick()
+        local c = game.Players.LocalPlayer.Character
+        local r = c and c:FindFirstChild("HumanoidRootPart")
+        local d = r and (cf.Position - r.Position).Magnitude or 0
+        FlyCtl.MaxAge = d / 60 + 5   -- tempo máx. sem nova chamada antes de desistir
+    end
+    -- compat: o resto do script chama TweenInstance:Cancel()
+    TweenInstance = {
+        PlaybackState = Enum.PlaybackState.Playing,
+        Cancel = function() FlyCtl.Goal = nil end,
+    }
+
+    game:GetService("RunService").Heartbeat:Connect(function(dt)
+        pcall(function()
+            dt = math.min(dt, 0.05)
+            local char = game.Players.LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp or not block or block.Parent ~= workspace then
+                getgenv().OnFarm = false; shouldTween = false
+                return
             end
-        end
-    end)
-    task.spawn(function()
-        local a = game.Players.LocalPlayer
-        repeat task.wait() until a.Character and a.Character.PrimaryPart
-        block.CFrame = a.Character.PrimaryPart.CFrame
-        while task.wait() do
-            pcall(function()
-                if getgenv().OnFarm then
-                    if block and block.Parent == workspace then
-                        local b = a.Character and a.Character.PrimaryPart
-                        if b and (b.Position - block.Position).Magnitude <= 200 then
-                            b.CFrame = block.CFrame
-                        else
-                            block.CFrame = b.CFrame
-                        end
-                    end
-                    local c = a.Character
-                    if c then
-                        for _, e in pairs(c:GetChildren()) do
-                            if e:IsA("BasePart") then e.CanCollide = false end
-                        end
-                    end
-                else
-                    local c = a.Character
-                    if c then
-                        for _, e in pairs(c:GetChildren()) do
-                            if e:IsA("BasePart") then e.CanCollide = true end
-                        end
-                    end
+            local now  = tick()
+            local goal = FlyCtl.Goal
+            if goal and (now - FlyCtl.LastCall) > FlyCtl.MaxAge then
+                FlyCtl.Goal = nil; goal = nil
+            end
+
+            local active = false
+            if goal then
+                if not FlyCtl.Active then
+                    block.CFrame = hrp.CFrame      -- começa sempre onde o personagem está
+                    FlyCtl.LastSet = nil
                 end
-            end)
-        end
+                local d0 = (goal.Position - block.Position).Magnitude
+                -- a caminho → continua; chegou → mantém 0.35s após a última chamada
+                active = d0 > 0.5 or (now - FlyCtl.LastCall) < 0.35
+                if not active then FlyCtl.Goal = nil end
+            end
+
+            if active then
+                FlyCtl.Active = true
+                local cur = block.Position
+
+                -- deteção de rubber-band: o servidor/anti-cheat devolveu-nos para trás
+                if FlyCtl.LastSet and (hrp.Position - FlyCtl.LastSet).Magnitude > 30
+                   and now - FlyCtl.LastBackoff > 0.5 then
+                    FlyCtl.LastBackoff = now
+                    FlyCtl.Penalty = math.max(0.55, FlyCtl.Penalty - 0.12)
+                    FlyCtl.PenaltyUntil = now + 25
+                    block.CFrame = hrp.CFrame
+                    cur = block.Position
+                end
+                if now > FlyCtl.PenaltyUntil and FlyCtl.Penalty < 1 then
+                    FlyCtl.Penalty = math.min(1, FlyCtl.Penalty + dt * 0.04)
+                end
+
+                local delta = goal.Position - cur
+                local d = delta.Magnitude
+                local step = FlyCtl.SpeedFor(d) * dt
+                local newPos = (d <= step) and goal.Position or (cur + delta.Unit * step)
+
+                block.CFrame = CFrame.new(newPos)
+                hrp.CFrame = block.CFrame
+                hrp.AssemblyLinearVelocity  = Vector3.zero
+                hrp.AssemblyAngularVelocity = Vector3.zero
+                FlyCtl.LastSet = newPos
+                getgenv().OnFarm = true; shouldTween = true
+            else
+                FlyCtl.Active = false
+                FlyCtl.LastSet = nil
+                block.CFrame = hrp.CFrame
+                getgenv().OnFarm = false; shouldTween = false
+            end
+        end)
+    end)
+
+    -- noclip enquanto voa (Stepped = antes da física, como o original fazia por frame)
+    game:GetService("RunService").Stepped:Connect(function()
+        pcall(function()
+            local c = game.Players.LocalPlayer.Character
+            if not c then return end
+            local on = getgenv().OnFarm and true or false
+            if on then
+                for _, e in ipairs(c:GetChildren()) do
+                    if e:IsA("BasePart") then e.CanCollide = false end
+                end
+            elseif FlyCtl.WasOn then
+                for _, e in ipairs(c:GetChildren()) do
+                    if e:IsA("BasePart") then e.CanCollide = true end
+                end
+            end
+            FlyCtl.WasOn = on
+        end)
     end)
 
     local W = 0
@@ -1758,10 +1860,186 @@ end
     -- ============================================================
     -- [FIXED] TWEEN CONTROLLER - GIỮ NGUYÊN 200/190
     -- ============================================================
+    -- ============================================================
+    -- [FIXED v4] SEA 1 — UNDERWATER CITY VIA WHIRLPOOL
+    -- A entrada é o redemoinho (whirlpool) rodeado por 3 pedras pequenas, entre
+    -- Frozen Village e Prison. O requestEntrance só funciona ESTANDO junto ao
+    -- redemoinho. Bug antigo: o script chamava requestEntrance de longe (o
+    -- servidor ignorava) e depois voava em linha reta para as coordenadas da
+    -- cidade (x ~ 61000) = "horizonte" até lá chegar por voo.
+    -- Agora: voa ao redemoinho, chama requestEntrance perto dele, confirma que
+    -- entrou (x > 40000); alterna entre 2 pontos do redemoinho; se falhar 6x
+    -- cai no comportamento antigo durante 60s (Config.WhirlpoolNoFallback=true
+    -- desativa esse recuo e fica a tentar o redemoinho).
+    -- ============================================================
+    local UW = {attempts = 0, lastTry = 0, fallbackUntil = 0, step = 0}
+    local UW_ENTRIES = {
+        Vector3.new(3876.28, 35.11, -1939.32),   -- da tabela Portals do script
+        Vector3.new(3864.69, 6.74, -1926.21),    -- centro ao nível do mar
+    }
+    local UW_DEST = Vector3.new(61163.8515625, 11.759522438049316, 1819.7841796875)
+
+    function TweenController.InUnderwaterCity(pos)
+        return pos.X > 40000
+    end
+
+    -- ============================================================
+    -- [FIXED v5] SAÍDA DA UNDERWATER CITY PELO PORTAL
+    -- A saída certa é o portal azul no centro da cúpula (coordenadas da tabela
+    -- Portals do script). requestEntrance só funciona junto a esse portal; o
+    -- destino é o Whirlpool. Antes o script voava ~57 000 studs em linha reta.
+    -- Mesmo esquema do Whirlpool: voa ao portal, tenta até 6x (alternando 2
+    -- pontos), confirma a saída (x <= 40000); se falhar recua 60s para o voo antigo.
+    -- ============================================================
+    local UWX = {attempts = 0, lastTry = 0, fallbackUntil = 0, step = 0}
+    local UWX_ENTRIES = {
+        Vector3.new(61163.8515625, 11.759522438049316, 1819.7841796875),  -- tabela Portals
+        Vector3.new(61164, 5, 1820),                                      -- "Underwater City" (ilhas)
+    }
+    local UWX_DEST = Vector3.new(3876.280517578125, 35.10614013671875, -1939.3201904296875)  -- Whirlpool
+
+    -- true = tratado aqui (não seguir); false = deixar o fluxo normal continuar
+    function TweenController.GoToCityExit()
+        local char = game.Players.LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return true end
+        -- Nunca retomar o voo direto enquanto ainda estamos dentro da cidade.
+        -- Mantém o controlo da saída mesmo se o portal demorar a responder.
+        if os.time() < UWX.fallbackUntil then UWX.fallbackUntil = 0 end
+
+        local entry = UWX_ENTRIES[(UWX.step % #UWX_ENTRIES) + 1]
+        pcall(function() SetTask("SubTask", "Portal -> sair da Underwater City") end)
+        FlyCtl.SetGoal(CFrame.new(entry))
+
+        if (hrp.Position - entry).Magnitude > 12 then return true end   -- ainda a caminho
+
+        if tick() - UWX.lastTry < 1.5 then return true end
+        UWX.lastTry = tick()
+        UWX.attempts = UWX.attempts + 1
+        task.spawn(function()
+            pcall(function() Remotes.CommF_:InvokeServer("requestEntrance", UWX_DEST) end)
+        end)
+        task.wait(1)
+
+        if TweenController.InUnderwaterCity(hrp.Position) then
+            UWX.step = UWX.step + 1                     -- tenta o outro ponto do portal
+            if UWX.attempts >= 6 then
+                UWX.attempts = 0
+                UWX.fallbackUntil = 0
+                pcall(function() Report("Portal: ainda dentro da Underwater City; continuo a tentar a saída") end)
+            end
+        else
+            UWX.attempts = 0
+        end
+        return true
+    end
+
+    -- true = tratado aqui (não seguir); false = deixar o fluxo normal continuar
+    function TweenController.GoToWhirlpool()
+        local char = game.Players.LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return true end
+        if not Config.WhirlpoolNoFallback and os.time() < UW.fallbackUntil then return false end
+
+        local entry = UW_ENTRIES[(UW.step % #UW_ENTRIES) + 1]
+        pcall(function() SetTask("SubTask", "Whirlpool -> Underwater City") end)
+        FlyCtl.SetGoal(CFrame.new(entry))
+
+        if (hrp.Position - entry).Magnitude > 12 then return true end   -- ainda a caminho
+
+        if tick() - UW.lastTry < 1.5 then return true end
+        UW.lastTry = tick()
+        UW.attempts = UW.attempts + 1
+        task.spawn(function()
+            pcall(function() Remotes.CommF_:InvokeServer("requestEntrance", UW_DEST) end)
+        end)
+        task.wait(1)
+
+        if not TweenController.InUnderwaterCity(hrp.Position) then
+            UW.step = UW.step + 1                       -- tenta o outro ponto do redemoinho
+            if UW.attempts >= 6 then
+                UW.attempts = 0
+                UW.fallbackUntil = os.time() + 60
+                pcall(function() Report("Whirlpool: 6 tentativas sem entrar na Underwater City") end)
+            end
+        else
+            UW.attempts = 0
+        end
+        return true
+    end
+
+    -- ============================================================
+    -- [FIXED v3] VIAGEM PARA A ILHA SUBMERSA
+    -- Bug antigo: depois de chegar ao NPC chamava o remote UMA vez e seguia
+    -- logo para FlyCtl.SetGoal(alvo) mesmo que o teleporte falhasse → o
+    -- personagem voava para as coordenadas da ilha (mar aberto) até ao
+    -- "horizonte". Agora: voa até ao Submarine Worker, tenta o remote várias
+    -- vezes, confirma que entrou (zona submersa) e, se falhar, PÁRA e espera
+    -- 2 min em vez de voar para o mar.
+    -- Requisito do jogo: ter derrotado o Tyrant of the Skies pelo menos 1x
+    -- (senão o NPC só diz que a ilha está ocupada por bandidos).
+    -- ============================================================
+    local SubTravel = {attempts = 0, lastTry = 0, blockedUntil = 0}
+    local SUB_NPC_FALLBACK = Vector3.new(-16269.7, 25.2, 1373.7)
+
+    function TweenController.InSubmergedZone(pos)
+        return pos.Y < -1200 and pos.X > 8000 and pos.X < 13000
+           and pos.Z > 8000 and pos.Z < 11500
+    end
+
+    local function FindSubmarineWorker()
+        for _, root in ipairs({workspace:FindFirstChild("NPCs"), game.ReplicatedStorage:FindFirstChild("NPCs")}) do
+            if root then
+                for _, npc in ipairs(root:GetChildren()) do
+                    if npc.Name == "Submarine Worker" then
+                        local ok, p = pcall(function() return npc:GetPivot().Position end)
+                        -- o da superfície (Tiki Outpost), não o da ilha submersa
+                        if ok and p.Y > -1000 and p.X < -10000 then return p end
+                    end
+                end
+            end
+        end
+        return SUB_NPC_FALLBACK
+    end
+
+    function TweenController.GoToSubmarine()
+        local char = game.Players.LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        if os.time() < SubTravel.blockedUntil then return end   -- falhou: não voa para o mar
+
+        local npcPos = FindSubmarineWorker()
+        local standAt = CFrame.new(npcPos + Vector3.new(0, 3, 0))
+        pcall(function() SetTask("SubTask", "Submarine Worker -> Ilha Submersa") end)
+        FlyCtl.SetGoal(standAt)                       -- voa/mantém-se junto ao NPC
+
+        if (hrp.Position - npcPos).Magnitude > 15 then
+            SubTravel.attempts = 0
+            return
+        end
+
+        if tick() - SubTravel.lastTry < 3 then return end
+        SubTravel.lastTry = tick()
+        SubTravel.attempts = SubTravel.attempts + 1
+        task.spawn(function()
+            pcall(function()
+                local net = require(game.ReplicatedStorage.Modules.Net)
+                net:RemoteFunction('SubmarineWorkerSpeak'):InvokeServer('TravelToSubmergedIsland')
+            end)
+        end)
+        task.wait(1.5)
+
+        if SubTravel.attempts >= 5 and not TweenController.InSubmergedZone(hrp.Position) then
+            SubTravel.blockedUntil = os.time() + 120
+            SubTravel.attempts = 0
+            pcall(function() SetTask("SubTask", "Submarine: nao entrou na Ilha Submersa (falta derrotar Tyrant of the Skies?)") end)
+            pcall(function() Report("Submarine Worker: 5 tentativas sem entrar na Ilha Submersa") end)
+        end
+    end
+
     function TweenController.Create(W)
         if not W or TweenDebounce then return end
         local a = typeof(W) ~= 'CFrame' and ConvertTo(CFrame, W) or W
-        if TweenInstance then pcall(function() TweenInstance:Cancel() end) end
         local character = game.Players.LocalPlayer.Character
         local hrp = character and character:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
@@ -1770,9 +2048,6 @@ end
         -- nhánh BypassTP (dist>=4000 → đổi spawn point) — không còn dùng
         -- cơ chế bypass qua spawn point nữa, mọi khoảng cách đều tween bình
         -- thường qua block (từ main_red_magic_beta.txt).
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = false end
-        end
         local head = character:WaitForChild("Head")
         if not head:FindFirstChild("eltrul") then
             local bv = Instance.new('BodyVelocity')
@@ -1781,55 +2056,36 @@ end
             bv.Velocity = Vector3.zero
             bv.Parent = head
         end
+        -- [FIXED v5] Sea 1: estamos dentro da Underwater City e o alvo está fora →
+        -- sair primeiro pelo portal do centro da cúpula.
+        if SeaIndex == 1 and TweenController.InUnderwaterCity(hrp.Position)
+           and not TweenController.InUnderwaterCity(a.Position) then
+            if TweenController.GoToCityExit() then return end
+        end
+        -- [FIXED v4] Sea 1: alvo dentro da Underwater City e ainda não estamos lá →
+        -- ir ao Whirlpool (não voar em linha reta para x ~ 61000).
+        if SeaIndex == 1 and TweenController.InUnderwaterCity(a.Position)
+           and not TweenController.InUnderwaterCity(hrp.Position) then
+            if TweenController.GoToWhirlpool() then return end
+        end
+        -- [FIXED v3] Ilha Submersa: só se entra pelo Submarine Worker (Tiki Outpost,
+        -- Sub Port 01). Nunca voar em direção às coordenadas da ilha (fica no
+        -- fundo do mar = "horizonte"); se o alvo está lá dentro e ainda não estamos,
+        -- o controlo passa para GoToSubmarine().
+        if SeaIndex == 3 and TweenController.InSubmergedZone(a.Position)
+           and not TweenController.InSubmergedZone(hrp.Position) then
+            TweenController.GoToSubmarine()
+            return
+        end
         if CaculateDistance(a) > 500 then
             if SeaIndex == 3 and not ScriptStorage.Backpack['Valkyrie Helm'] then
             elseif SeaIndex ~= 3 then
                 GetPortal(a)
             end
         end
-        if CaculateDistance(Vector3.new(11256, -2138.0, 9888), a) < (CaculateDistance(a) - 700) and SeaIndex == 3 then
-            local gatePos = CFrame.new(-16269.0, 23, 1371)
-            if CaculateDistance(gatePos) > 60 then
-                TweenController.Create(gatePos)
-                task.wait(1)
-                return
-            end
-            local net = require(game.ReplicatedStorage.Modules.Net)
-            net:RemoteFunction('SubmarineWorkerSpeak'):InvokeServer('TravelToSubmergedIsland')
-        end
 
-        a = CFrame.new(a.Position)
-        local dist = CaculateDistance(hrp.CFrame, a)
-
-        if dist <= 5 then
-            hrp.CFrame = a
-            block.CFrame = a
-            return
-        end
-
-        -- [FIXED - theo yêu cầu boss man: "chỉnh lên 160 cho nhanh ko vượt
-        -- quá 160"] Bỏ hẳn bảng 110/100 cũ — dùng 1 mức tốc độ CỐ ĐỊNH 160
-        -- (giống tween của main_red_magic_beta.txt, chỉ đổi số chia 300 →
-        -- 160 để nhanh hơn), không có mức nào vượt quá con số này.
-        local divisor = 160
-        local duration = dist / divisor
-
-        -- [FIXED - port tween từ main_red_magic_beta.txt] Tween "block"
-        -- (Part vô hình) thay vì tween thẳng hrp — nhân vật tự bám theo
-        -- block qua vòng lặp sync đã thêm ở trên (getgenv().OnFarm).
-        shouldTween = true
-        TweenInstance = Services.TweenService:Create(block, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = a})
-        TweenInstance:Play()
-        task.spawn(function()
-            while TweenInstance and TweenInstance.PlaybackState == Enum.PlaybackState.Playing do
-                if not shouldTween then
-                    pcall(function() TweenInstance:Cancel() end)
-                    break
-                end
-                task.wait(0.1)
-            end
-            shouldTween = false
-        end)
+        -- [FIXED v2] só actualiza o alvo; o movimento é feito pelo FlyCtl (Heartbeat)
+        FlyCtl.SetGoal(CFrame.new(a.Position))
     end
 
     -- ============================================================
@@ -1856,7 +2112,10 @@ end
         bladehits = {}
         for X, X in pairs(workspace.Enemies:GetChildren()) do
             if X:FindFirstChild('Humanoid') and X:FindFirstChild('HumanoidRootPart') and X.Humanoid.Health > 0 and (X.HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 65 then
-                table.insert(bladehits, X)
+                local f = AttackFilterNames
+                if not f or (tick() - (AttackFilterTick or 0)) > 1.5 or f[X.Name] then
+                    table.insert(bladehits, X)
+                end
             end
         end
         return bladehits
@@ -1876,7 +2135,9 @@ end
     function h:Attack()
         local X = {}
         for y, y in pairs(GetAllBladeHits()) do table.insert(X, y) end
-        for y, y in pairs(Getplayerhit()) do table.insert(X, y) end
+        if Config.AttackPlayers == true then
+            for y, y in pairs(Getplayerhit()) do table.insert(X, y) end
+        end
         if #X == 0 then return end
         local y = {[1] = nil, [2] = {}, [4] = "078da5141"}
         for L, L in pairs(X) do
@@ -1895,101 +2156,141 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     CombatController = {GRAB = false, GRAB_DISTANCE = SeaIndex == 1 and 250 or 350, MAX_ATTACK_DURATION = 2, MAX_ATTACK_DURATION_2 = 60, LEVITATE_TIME = 0, CurrentIndex = 1}
 
     -- ============================================================
-    -- [NEW] BRING MOBS — trích từ Maru Hub, boss man yêu cầu chỉnh
-    -- bringRange 888 → 300 (giảm cho gọn, đỡ kéo quái từ quá xa)
-    -- Config.BringMobs bật/tắt; PosMon/Mon set từ bên ngoài lúc cần kéo
-    -- quái về 1 điểm cụ thể (VD: farm quest cần gom quái).
-    -- KHÔNG lock quái mà CombatController đang target dở — tránh xung đột
-    -- 2 hệ thống cùng giữ 1 con quái theo 2 cách khác nhau.
+    -- [NEW v2] BRING MOBS — puxa SÓ para o 1.º mob que comecei a matar
+    -- * Anchor = o mob com que o ataque começou (BringSetAnchor).
+    --   Mantém-se fixo até esse mob morrer / o combate acabar; depois
+    --   o próximo mob atacado passa a ser o novo anchor.
+    -- * Só puxa nomes presentes no filtro do farm ativo; fallback: nome do anchor.
+    -- * Raio moderado para evitar puxar NPCs demasiado distantes.
+    -- * Corre no Heartbeat (cada frame) para os mobs não "fugirem" entre updates.
+    -- * Só mexe em mobs de que somos network owner (senão não replica).
+    -- * Config.BringMobs liga/desliga. BringRadius default 800, BringMaxMobs default 30.
     -- ============================================================
-    getgenv().BringMonster = getgenv().BringMonster or false
-    PosMon = PosMon or nil
-    Mon = Mon or nil
+    BringAnchor     = nil   -- Model do 1.º mob atacado
+    BringAnchorTick = 0     -- atualizado pelo loop de ataque (auto-limpa ao sair)
 
-    BringEnemy = function()
-        pcall(function()
-            if not Config.BringMobs or not getgenv().BringMonster then return end
-            if not PosMon then return end
-
-            local _char = LocalPlayer.Character
-            if not _char then return end
-            local _root = _char:FindFirstChild("HumanoidRootPart")
-            if not _root then return end
-
-            local targetCF = typeof(PosMon) == "CFrame" and PosMon or CFrame.new(PosMon)
-            local pinCF     = targetCF * CFrame.new(0, 3, 0)
-            local maxPull   = 20
-            local pulled    = 0
-            local bringRange = 300 -- [FIXED] 888 → 300 theo yêu cầu boss man
-
-            local targetName = (Mon and Mon ~= "") and Mon or nil
-
-            local function LockMob(v, hrp, hum)
-                hrp.CFrame     = pinCF
-                hrp.CanCollide = false
-
-                local head = v:FindFirstChild("Head")
-                if head then
-                    head.CFrame     = pinCF * CFrame.new(0, 2, 0)
-                    head.CanCollide = false
-                end
-
-                hum.WalkSpeed  = 0
-                hum.JumpPower  = 0
-                hum.AutoRotate = false
-
-                local anim = hum:FindFirstChildOfClass("Animator")
-                if anim then anim:Destroy() end
-
-                for _, t in ipairs(v:GetChildren()) do
-                    if t:IsA("Script") or t:IsA("LocalScript") then
-                        t.Disabled = true
-                    end
-                end
-
-                if hrp:FindFirstChild("_Lock") then
-                    hrp._Lock.Velocity = Vector3.new(0, 0, 0)
-                    hrp._Lock.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-                else
-                    local bv    = Instance.new("BodyVelocity")
-                    bv.Name     = "_Lock"
-                    bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-                    bv.Velocity = Vector3.new(0, 0, 0)
-                    bv.Parent   = hrp
-                end
-
-                pcall(function() sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge) end)
-                hum:ChangeState(11)
-            end
-
-            local enemyFolder = workspace:FindFirstChild("Enemies")
-            if enemyFolder then
-                for _, v in ipairs(enemyFolder:GetChildren()) do
-                    if pulled >= maxPull then break end
-                    if targetName and v.Name ~= targetName then continue end
-                    -- (Đã bỏ check "đừng lock quái CombatController đang đánh" —
-                    -- field CombatController.CurrentTarget không tồn tại thật
-                    -- trong code, check đó luôn so với nil, không bảo vệ được
-                    -- gì. Thực tế lock (đứng im) không cản CombatController
-                    -- gây damage, nên không cần check này.)
-
-                    local hrp = v:FindFirstChild("HumanoidRootPart")
-                    local hum = v:FindFirstChild("Humanoid")
-                    if not hrp or not hum or hum.Health <= 0 then continue end
-                    if (hrp.Position - _root.Position).Magnitude > bringRange then continue end
-
-                    LockMob(v, hrp, hum)
-                    pulled = pulled + 1
-                end
-            end
-        end)
+    function BringSetAnchor(mob)
+        BringAnchor     = mob
+        BringAnchorTick = tick()
+    end
+    function BringKeepAlive()
+        BringAnchorTick = tick()
+        AttackFilterTick = tick()
     end
 
-    task.spawn(function()
-        while task.wait(0.05) do
-            BringEnemy()
+    -- ============================================================
+    -- [NEW] FILTRO DE ALVOS DO FAST ATTACK — só mobs da missão
+    -- Antes o fast attack acertava em TODOS os mobs a <=65 studs (e em
+    -- jogadores), por isso batia em NPCs que não eram da quest (ex.:
+    -- "Dangerous Prisoner" ao lado dos "Prisoner"). Agora só acerta nos
+    -- mobs cujo nome foi passado a CombatController.Attack (ex.: Q.Mon).
+    -- O filtro expira 1.5s depois do último ataque; fora do loop de
+    -- ataque (outras funções que usam _G.FastAttack) o comportamento
+    -- antigo mantém-se. Jogadores: só com Config.AttackPlayers = true.
+    -- ============================================================
+    AttackFilterNames = nil
+    AttackFilterTick  = 0
+    function SetAttackFilter(names)
+        local set = {}
+        local ok = pcall(function()
+            for _, n in pairs(names) do set[tostring(n)] = true end
+        end)
+        AttackFilterNames = (ok and next(set)) and set or nil
+        AttackFilterTick  = tick()
+    end
+
+    -- Prisioneiros: o bring só é bloqueado para NPCs "prisoner" quando o jogador
+    -- está na ilha da prisão (Sea 1). Em qualquer outro sítio funciona normal.
+    local PRISON_CENTER = Vector3.new(4870, 6, 736)
+    local function _onPrisonIsland()
+        if SeaIndex ~= 1 then return false end
+        local c = game.Players.LocalPlayer.Character
+        local r = c and c:FindFirstChild("HumanoidRootPart")
+        return r ~= nil and (r.Position - PRISON_CENTER).Magnitude < 1500
+    end
+    local function _isPrisonerBlocked(name)
+        return string.find(string.lower(name), "prisoner", 1, true) ~= nil and _onPrisonIsland()
+    end
+
+    local _bringSimTick = 0
+    local function _isMine(part)
+        -- Network ownership APIs differ between executors. Treat errors as
+        -- non-blocking and do not reject the whole Bring cycle on a false/unknown result.
+        if not isnetworkowner then return true end
+        local ok, res = pcall(isnetworkowner, part)
+        if not ok or res == nil then return true end
+        return res == true
+    end
+
+    BringEnemy = function()
+        if not Config.BringMobs then return end
+        local anchor = BringAnchor
+        if not anchor or anchor.Parent ~= workspace:FindFirstChild("Enemies") then return end  -- ignora templates do ReplicatedStorage
+        -- Prisoner NPCs: nunca usar como âncora — mas só na ilha da prisão.
+        if _isPrisonerBlocked(anchor.Name) then return end
+        -- Allow a slightly wider scheduling gap; the attack loop refreshes this
+        -- timestamp while the target remains alive.
+        if tick() - BringAnchorTick > 2.0 then return end
+        local aHum  = anchor:FindFirstChildOfClass("Humanoid")
+        local aRoot = anchor:FindFirstChild("HumanoidRootPart")
+        if not aHum or aHum.Health <= 0 or not aRoot then return end
+
+        local folder = workspace:FindFirstChild("Enemies")
+        if not folder then return end
+
+        -- network ownership: re-aplicar 1x por segundo chega
+        if tick() - _bringSimTick > 1 then
+            _bringSimTick = tick()
+            pcall(function() sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge) end)
+            pcall(function() sethiddenproperty(LocalPlayer, "MaximumSimulationRadius", math.huge) end)
         end
+
+        local radius  = Config.BringRadius or 800
+        local maxPull = Config.BringMaxMobs or 30
+        local target  = aRoot.CFrame
+        local aPos    = aRoot.Position
+        local pulled  = 0
+        -- Use the names passed to the current CombatController.Attack call.
+        -- If that short-lived filter is unavailable, fall back to the anchor's name.
+        local activeNames = AttackFilterNames
+        local filterFresh = activeNames and (tick() - (AttackFilterTick or 0)) <= 1.5
+
+        for _, v in ipairs(folder:GetChildren()) do
+            if pulled >= maxPull then break end
+            local isPrisoner = _isPrisonerBlocked(v.Name)
+            local isFarmTarget = filterFresh and activeNames[v.Name] or v.Name == anchor.Name
+            -- Na ilha da prisão nunca puxar os prisioneiros, mesmo que o nome esteja no filtro.
+            if v ~= anchor and not isPrisoner and isFarmTarget then
+                local hum  = v:FindFirstChildOfClass("Humanoid")
+                local root = v:FindFirstChild("HumanoidRootPart")
+                if hum and root and hum.Health > 0
+                   and (root.Position - aPos).Magnitude <= radius then
+                    -- Do not let a transient network-ownership check prevent all
+                    -- attempts to bring a valid farm target. Protect per-NPC writes
+                    -- so one rejected property does not stop the remaining NPCs.
+                    pulled = pulled + 1
+                    pcall(function()
+                        -- Move only the NPC root. Avoid forcing Humanoid into Physics
+                        -- or changing its movement stats, which can interfere with hit
+                        -- registration and normal NPC combat behaviour.
+                        if (root.Position - aPos).Magnitude > 2 then
+                            root.CFrame = target
+                        end
+                        root.CanCollide = false
+                        root.AssemblyLinearVelocity  = Vector3.zero
+                        root.AssemblyAngularVelocity = Vector3.zero
+                        local head = v:FindFirstChild("Head")
+                        if head then head.CanCollide = false end
+                    end)
+                end
+            end
+        end
+    end
+
+    game:GetService("RunService").Heartbeat:Connect(function()
+        pcall(BringEnemy)
     end)
+
 
 
     LastFound = os.time()
@@ -2027,6 +2328,23 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             end
         end
     end
+    -- Detecta o aviso da missao sem excluir todos os NPCs com o mesmo nome.
+    local function IsPrisonerBlocked()
+        local player = game:GetService("Players").LocalPlayer
+        local playerGui = player and player:FindFirstChild("PlayerGui")
+        if not playerGui then return false end
+
+        for _, obj in ipairs(playerGui:GetDescendants()) do
+            if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+                local txt = string.lower(obj.Text or "")
+                if string.find(txt, "confront the prisoner before attacking", 1, true) then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+    local PrisonerBlockLatched = false
     function Sort1(entity) return entity and entity:FindFirstChild("HumanoidRootPart") and math.floor(CaculateDistance(entity.HumanoidRootPart.CFrame)) end
     function CombatController.Search(names)
         local candidates = {}
@@ -2056,6 +2374,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         end
         sethiddenproperty(game.Players.LocalPlayer, 'SimulationRadius', math.huge)
         h = type(h) == "string" and {h} or (h or {})
+        if X then AttackFilterNames = nil else SetAttackFilter(h) end
+        local nameList = h
         for y, L in (h) do
             local b = tostring(L)
             if b == 'Deandre' or b == "Urban" or b == "Diablo" and (os.time() - (LastFire12 or 0)) > 180 then
@@ -2071,11 +2391,43 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             end
             if MonResult then
                 LastFound = os.time()
+                BringSetAnchor(MonResult)
                 local h, w = 0, os.time()
                 SetTask('SubTask', '⚔️ Attacking ' .. tostring(MonResult.Name))
                 local w, b = 0, os.time()
                 while task.wait() do
                     if _G.Stop then return end
+
+                    -- Quando o aviso aparece durante o ataque a este Prisoner,
+                    -- marca apenas esta instancia e volta ao farm. Outros Prisoners
+                    -- com o mesmo nome continuam elegiveis.
+                    -- [PERF] só verifica quando o alvo é um "Prisoner" e no máximo 4x/s
+                    -- (antes varria o PlayerGui inteiro EM TODOS OS FRAMES, em qualquer mob).
+                    local prisonerBlocked = false
+                    if MonResult and MonResult.Name == "Prisoner" and tick() - (PrisonerCheckTick or 0) > 0.25 then
+                        PrisonerCheckTick = tick()
+                        prisonerBlocked = IsPrisonerBlocked()
+                        if not prisonerBlocked then PrisonerBlockLatched = false end
+                    end
+                    if prisonerBlocked and MonResult and MonResult.Name == "Prisoner" and not PrisonerBlockLatched then
+                        MonResult:SetAttribute("FailureCount", 3)
+                        PrisonerBlockLatched = true
+                        return
+                    end
+
+                    -- [FIXED] se o alvo ainda é o "template" do ReplicatedStorage (os mobs
+                    -- não estavam carregados quando a pesquisa correu), troca para o mob
+                    -- real assim que aparecer — senão o Bring Mobs ficava sem âncora.
+                    if not X and MonResult.Parent == game:GetService("ReplicatedStorage")
+                       and tick() - (ReSearchTick or 0) > 0.5 then
+                        ReSearchTick = tick()
+                        local real = CombatController.Search(nameList)
+                        if real and real.Parent == workspace:FindFirstChild("Enemies") then
+                            MonResult = real
+                            BringSetAnchor(real)
+                        end
+                    end
+
                     if ScriptStorage.Tools["Sweet Chalice"] and getsenv(game.ReplicatedStorage.GuideModule)["_G"]["InCombat"] then
                         pcall(function() if TweenInstance then TweenInstance:Cancel() end end) -- [FIXED] không tween về (0,0,0) khi Sweet Chalice InCombat
                         return
@@ -2086,10 +2438,16 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                         if MonResult.Name == "Don Swan" then Storage:Set("SwanDefeated", true) end
                         break
                     end
+                    -- Keep the Bring anchor alive throughout approach and attack,
+                    -- not only after reaching the 150-stud combat radius.
+                    if MonResult.Parent == workspace:FindFirstChild("Enemies") then
+                        BringKeepAlive()
+                    end
                     TweenController.Create(CaculateCircreDirection(p.CFrame) + Vector3.new(0, 35, 0))
                     if CaculateDistance(p.Position + Vector3.new(0, 35, 0)) < 150 then
                         y = D and D()
                         CombatController.Grab(L or '')
+                        BringKeepAlive()
                         if MonResult.Name ~= "Core" then
                             if ScriptStorage.PlayerData.Level > 100 and w >= CombatController.MAX_ATTACK_DURATION_2 and C.Health - C.MaxHealth == 0 then
                                 SetTask('SubTask', 'Hop Server - Mob Health Unchanged ( ' .. C.Health .. ' / ' .. C.MaxHealth .. ')')
@@ -2140,7 +2498,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 end
             elseif not X then
                 if (os.time() - LastFound) > 200 then
-                    alert('MeyyHub', 'Error while farming, rejoin')
+                    alert('BombaCat Hub', 'Error while farming, rejoin')
                     game:GetService("ReplicatedStorage").__ServerBrowser:InvokeServer("teleport", game.JobId)
                     return
                 end
@@ -2276,7 +2634,10 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
 
     FunctionsHandler.MeleesController:RegisterMethod("Refresh", function()
         if not Config.Items.AutoFullyMelees or not Config.Melee.AutoBuy then return nil end
-        if ScriptStorage.PlayerData.Level < 200 then return nil end
+        -- Até ao nível 300, as primeiras melee ainda estão bloqueadas por nível.
+        -- Não ativar este controlador antes disso: deixa o dispatcher executar
+        -- LevelFarm normalmente em vez de ficar preso em "Cần Player Level 300".
+        if (ScriptStorage.PlayerData.Level or 0) < 300 then return nil end
         -- [FIXED] Bỏ "if _G.Level then return nil end" — đây là khóa VĨNH VIỄN,
         -- một khi thiếu tiền 1 lần là MeleesController tắt luôn mãi mãi vì
         -- không có chỗ nào khác set lại _G.Level = false. Bỏ hẳn cờ này,
@@ -2293,6 +2654,28 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         if hasAll then
             SetTask('MainTask', 'Auto Full Melee | ✅ Đã có tất cả!')
             return nil
+        end
+
+        -- [FIX] Không để Auto Full Melee chặn LevelFarm khi chưa thể avançar.
+        -- Electro só pode ser tentado depois de Black Leg atingir 500 mastery.
+        -- Se faltar dinheiro/Fragments para a próxima compra, cede a vez ao
+        -- LevelFarm para continuar a ganhar XP, Beli e mastery em vez de parar.
+        for _, name in ipairs(allMelees) do
+            if not CheckItem(name) then
+                if name == "Electro" and (ScriptStorage.Melees["Black Leg"] or 0) < 500 then
+                    return nil
+                end
+
+                local data = MeleePrices[name]
+                local price = data and data.Price or {}
+                local beli = ScriptStorage.PlayerData.Beli or 0
+                local fragments = ScriptStorage.PlayerData.Fragments or 0
+                if (price.Beli and beli < price.Beli)
+                    or (price.Fragments and fragments < price.Fragments) then
+                    return nil
+                end
+                break
+            end
         end
         return true
     end)
@@ -3204,8 +3587,6 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     -- TRƯỚC khi TweenController.Create — vừa dùng logic message(10), vừa không đơ.
     -- ══════════════════════════════════════════════════════════════════
     FunctionsHandler.LevelFarm:RegisterMethod("Start", function(h)
-        -- Bring Mob: desativa até o ramo de farm definir o alvo atual.
-        getgenv().BringMonster = false
         local currentLevel = ScriptStorage.PlayerData.Level or 0
 
         -- Guard: đã lên đủ level sang Sea 2 → không farm Sea 1 nữa
@@ -3250,9 +3631,6 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                         if hum and hum.Health > 0 then
                             foundMob = true
                             SetTask("SubTask", "⚔️ Attacking Shanda")
-                            Mon = "Shanda"
-                            PosMon = v2:GetPivot()
-                            getgenv().BringMonster = Config.BringMobs
                             CombatController.Attack("Shanda")
                             break
                         end
@@ -3293,9 +3671,6 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                         if hum and hum.Health > 0 then
                             foundMob = true
                             SetTask("SubTask", "⚔️ Attacking God's Guard")
-                            Mon = "God's Guard"
-                            PosMon = v2:GetPivot()
-                            getgenv().BringMonster = Config.BringMobs
                             CombatController.Attack("God's Guard")
                             break
                         end
@@ -3352,11 +3727,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                     task.wait(0.3)
                 end
             end
-            -- Bring Mob: đồng bộ tên quái và điểm gom theo dữ liệu farm hiện tại.
-            Mon = Q.Mon
-            PosMon = Q.PosM
-            getgenv().BringMonster = Config.BringMobs and Q.PosM ~= nil
-            -- CombatController.Attack tự tìm quái + tween + đánh.
+            -- CombatController.Attack tự làm: tìm quái + tween + đánh
+            -- (thay thế bringMob + equipWeapon + FastAttack + CheckMonster)
             CombatController.Attack(Q.Mon)
         end
     end)
@@ -5595,7 +5967,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     k:RegisterNotifyListener("scroll reacts", function() DoneCdkTick = os.time() end)
     k:RegisterNotifyListener("elite", function()
         FunctionsHandler.Yama:Set('EliteCount', Remotes.CommF_:InvokeServer("EliteHunter", "Progress"))
-        alert("[MeyyHub ] ", "Elite defeated: " .. tostring(FunctionsHandler.Yama:Get("EliteCount") or 'n/a'))
+        alert("[BombaCat Hub] ", "Elite defeated: " .. tostring(FunctionsHandler.Yama:Get("EliteCount") or 'n/a'))
     end)
     k:RegisterNotifyListener('the raid with', function()
         if ScriptStorage.PlayerData.Level < MaxLevel then return end
@@ -6143,7 +6515,242 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     end
 end
 
+--============================================================
+-- [FIXED] UI movida para ANTES de hoangtuveu(): essa função tem o loop
+-- principal infinito (while task.wait()), por isso tudo o que estava
+-- depois dela (incluindo o botão que abre a interface) nunca chegava a correr.
+-- A UI corre em task.spawn, logo não bloqueia nada.
+--============================================================
+--============================================================
+-- HEX HUB UI (extraída)
+--============================================================
+task.spawn(function()
+    local Players = game:GetService("Players")
+    local TweenService = game:GetService("TweenService")
+    local CoreGui = game:GetService("CoreGui")
+    local LP = Players.LocalPlayer
+    local RS = game:GetService("ReplicatedStorage")
+    local PlayerGui = LP:WaitForChild("PlayerGui")
+    local CommF
+    pcall(function()
+        local Remotes = RS:WaitForChild("Remotes", 5)
+        if Remotes then CommF = Remotes:WaitForChild("CommF_", 5) end
+    end)
 
+    for _, container in ipairs({CoreGui, PlayerGui}) do
+        for _, name in ipairs({"Noguchi Status", "Noguchi Ui", "Noguchi Toggle", "BombaCat Ui", "BombaCat Toggle"}) do
+            pcall(function()
+                local old = container:FindFirstChild(name)
+                if old then old:Destroy() end
+            end)
+        end
+    end
+
+    local UI = {}
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "BombaCat Ui"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.DisplayOrder = 50
+    ScreenGui.IgnoreGuiInset = true
+    ScreenGui.Parent = PlayerGui
+
+    local Frame = Instance.new("Frame", ScreenGui)
+    Frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    Frame.Size = UDim2.new(0, 600, 0, 400)
+    Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    Frame.BackgroundTransparency = 1
+    Frame.BorderSizePixel = 0
+    Frame.Active = false
+    Frame.Visible = true
+
+    local Frame2 = Instance.new("Frame", Frame)
+    Frame2.AnchorPoint = Vector2.new(0.5, 0.5)
+    Frame2.Size = UDim2.new(1, -47, 1, -47)
+    Frame2.Position = UDim2.new(0.5, 0, 0.5, 0)
+    Frame2.BackgroundColor3 = Color3.new(0, 0, 0)
+    Frame2.BackgroundTransparency = 0.5
+    Frame2.BorderSizePixel = 0
+    Instance.new("UICorner", Frame2).CornerRadius = UDim.new(0, 5)
+
+    local UIStroke = Instance.new("UIStroke", Frame2)
+    UIStroke.Color = Color3.new(255, 255, 255)
+    UIStroke.Thickness = 4
+
+    local UIGradient = Instance.new("UIGradient", UIStroke)
+    UIGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 221, 0)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(153, 115, 0))
+    })
+
+    local function makeLabel(text, pos, size)
+        local lbl = Instance.new("TextLabel", Frame2)
+        lbl.Size = size or UDim2.new(0, 200, 0, 18)
+        lbl.Position = pos
+        lbl.BackgroundTransparency = 1
+        lbl.Text = text
+        lbl.TextColor3 = Color3.new(1, 1, 1)
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 16
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.ZIndex = 2
+        return lbl
+    end
+
+    local TextLabel = makeLabel("BombaCat Hub", UDim2.new(0.4, 0, 0.05, 0))
+    local UIGradient2 = Instance.new("UIGradient", TextLabel)
+    UIGradient2.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 221, 0)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(153, 115, 0))
+    })
+
+    local TextLabel2 = makeLabel(" Account Stats ", UDim2.new(0.2, 0, 0.25, 0), UDim2.new(0, 150, 0, 18))
+    TextLabel2.TextSize = 18
+    local UIGradient3 = Instance.new("UIGradient", TextLabel2)
+    UIGradient3.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 221, 0)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(153, 115, 0))
+    })
+
+    local TextLabel3 = makeLabel(" Account Items ", UDim2.new(0.75, 0, 0.25, 0), UDim2.new(0, 150, 0, 18))
+    TextLabel3.TextSize = 18
+    local UIGradient4 = Instance.new("UIGradient", TextLabel3)
+    UIGradient4.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 221, 0)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(153, 115, 0))
+    })
+
+    UI.Level = makeLabel("Level: 0", UDim2.new(0.07, 0, 0.35, 0))
+    UI.Race = makeLabel("Race: ?", UDim2.new(0.07, 0, 0.45, 0))
+    UI.Beli = makeLabel("Beli: 0", UDim2.new(0.07, 0, 0.55, 0))
+    UI.Frag = makeLabel("Frag: 0", UDim2.new(0.07, 0, 0.65, 0))
+    UI.GodHuman = makeLabel("🔴 GodHuman", UDim2.new(0.07, 0, 0.80, 0))
+    UI.CDK = makeLabel("🔴 Cursed Dual Katana", UDim2.new(0.4, 0, 0.80, 0))
+    UI.SkullGuitar = makeLabel("🔴 Skull Guitar", UDim2.new(0.07, 0, 0.90, 0))
+    UI.MirrorFractal = makeLabel("🔴 Mirror Fractal", UDim2.new(0.4, 0, 0.90, 0))
+    UI.Valkyrie = makeLabel("🔴 Valkyrie Helm", UDim2.new(0.75, 0, 0.80, 0), UDim2.new(0, 150, 0, 18))
+    UI.PullLever = makeLabel("🔴 Pull Lever", UDim2.new(0.75, 0, 0.90, 0), UDim2.new(0, 150, 0, 18))
+
+    local CanvasGroup = Instance.new("CanvasGroup", Frame2)
+    CanvasGroup.Size = UDim2.new(0.4, 0, 0.35, 0)
+    CanvasGroup.Position = UDim2.new(0.55, 0, 0.35, 0)
+    CanvasGroup.BackgroundTransparency = 1
+
+    local ScrollingFrame = Instance.new("ScrollingFrame", CanvasGroup)
+    ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    ScrollingFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    ScrollingFrame.Size = UDim2.new(1, 0, 1, 0)
+    ScrollingFrame.BackgroundTransparency = 1
+    ScrollingFrame.BorderSizePixel = 0
+    ScrollingFrame.ScrollBarImageTransparency = 1
+    ScrollingFrame.ScrollBarThickness = 4
+    ScrollingFrame.ZIndex = 2
+
+    local UIListLayout = Instance.new("UIListLayout", ScrollingFrame)
+    UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    UIListLayout.Padding = UDim.new(0, 2)
+
+    UI.addItemLabel = function(text)
+        local label = Instance.new("TextLabel", ScrollingFrame)
+        label.Size = UDim2.new(1, 0, 0, 18)
+        label.BackgroundTransparency = 1
+        label.Text = text
+        label.TextColor3 = Color3.new(1, 1, 1)
+        label.Font = Enum.Font.GothamBold
+        label.TextSize = 16
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.ZIndex = 2
+        return { Destroy = function() label:Destroy() end }
+    end
+
+    local godhumanUnlocked = false
+    if CommF then
+        task.spawn(function()
+            while not (CommF:InvokeServer("BuyGodhuman") == 1 or CommF:InvokeServer("BuyGodhuman") == 2) do
+                task.wait(3600)
+            end
+            godhumanUnlocked = true
+        end)
+    end
+    UI.getGodHuman = function() return godhumanUnlocked end
+
+    for _, grad in ipairs({UIGradient, UIGradient2, UIGradient3, UIGradient4}) do
+        task.spawn(function()
+            while true do
+                local tween = TweenService:Create(grad, TweenInfo.new(3, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, -1, false, 0), { Rotation = 360 })
+                tween:Play()
+                tween.Completed:Wait()
+                grad.Rotation = 0
+            end
+        end)
+    end
+
+    local ToggleBtn = Instance.new("ImageButton")
+    ToggleBtn.Name = "BombaCat Toggle"
+    ToggleBtn.Size = UDim2.new(0, 55, 0, 55)
+    ToggleBtn.AnchorPoint = Vector2.new(0, 0.5)
+    ToggleBtn.Position = UDim2.new(0, 15, 0.5, 0)
+    ToggleBtn.BackgroundColor3 = Color3.new(0, 0, 0)
+    ToggleBtn.BackgroundTransparency = 0.5  -- preto transparente, igual ao fundo da interface
+    ToggleBtn.Image = "rbxthumb://type=Asset&id=113347835552896&w=420&h=420"
+    ToggleBtn.ZIndex = 100
+    ToggleBtn.Draggable = true
+    ToggleBtn.Active = true
+        ToggleBtn.Parent = ScreenGui
+    Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
+    local BtnStroke = Instance.new("UIStroke", ToggleBtn)
+    BtnStroke.Color = Color3.fromRGB(255, 200, 0)  -- contorno amarelo
+    BtnStroke.Thickness = 2.5
+    BtnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    ToggleBtn.MouseButton1Click:Connect(function()
+        Frame.Visible = not Frame.Visible
+    end)
+    -- stats (1s)
+    task.spawn(function()
+        while task.wait(1) do
+            pcall(function()
+                local data = LP:FindFirstChild("Data")
+                if data then
+                    UI.Level.Text = "Level: " .. tostring(data:FindFirstChild("Level") and data.Level.Value or 0)
+                    UI.Race.Text = "Race: " .. tostring(data:FindFirstChild("Race") and data.Race.Value or "?")
+                    UI.Beli.Text = "Beli: " .. tostring(data:FindFirstChild("Beli") and data.Beli.Value or 0)
+                    local frags = data:FindFirstChild("Fragments")
+                    UI.Frag.Text = "Frag: " .. (frags and tostring(frags.Value) or "Only Sea 2, 3")
+                end
+            end)
+        end
+    end)
+
+    -- inventario (2s)
+    local _inventoryLabels = {}
+    task.spawn(function()
+        while task.wait(2) do
+            if not CommF then continue end
+            pcall(function()
+                for labelObj in pairs(_inventoryLabels) do pcall(function() labelObj:Destroy() end) end
+                _inventoryLabels = {}
+                local inventory = CommF:InvokeServer("getInventory")
+                if type(inventory) == "table" then
+                    for _, item in pairs(inventory) do
+                        local itemName = item.Name or "?"
+                        local labelObj = UI.addItemLabel(string.format("%s - %s", itemName, item.Count or item.Type or ""))
+                        _inventoryLabels[labelObj] = true
+                        if itemName == "Cursed Dual Katana" then UI.CDK.Text = "🟢 Cursed Dual Katana"
+                        elseif itemName == "Skull Guitar" then UI.SkullGuitar.Text = "🟢 Skull Guitar"
+                        elseif itemName == "Mirror Fractal" then UI.MirrorFractal.Text = "🟢 Mirror Fractal"
+                        elseif itemName == "Valkyrie Helm" then UI.Valkyrie.Text = "🟢 Valkyrie Helm" end
+                    end
+                end
+                UI.GodHuman.Text = UI.getGodHuman() and "🟢 GodHuman" or "🔴 GodHuman"
+                local doorOpen = CommF:InvokeServer("CheckTempleDoor")
+                UI.PullLever.Text = doorOpen and "🟢 Pull Lever" or "🔴 Pull Lever"
+            end)
+        end
+    end)
+
+    getgenv().HexUI = UI
+end)
+
+hoangtuveu()
 --============================================================
 -- [EXTRAS] NO ANIMATION + AUTO REDEEM CODES + AUTO RANDOM FRUIT (GACHA)
 -- Opções (pode editar/desligar):
@@ -6179,61 +6786,23 @@ task.spawn(function()
     -- AUTO REDEEM CODES
     task.spawn(function()
         if not Config.Extras.AutoRedeemCodes then return end
-
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        local remotes = ReplicatedStorage:WaitForChild("Remotes", 30)
-
-        if not remotes then
-            warn("[Kaitun][2xEXP] Remotes não encontrados.")
-            return
-        end
-
-        local redeem = remotes:WaitForChild("Redeem", 30)
-
-        if not redeem then
-            warn("[Kaitun][2xEXP] Remote Redeem não encontrado.")
-            return
-        end
-
-        -- Códigos 2x EXP ativos segundo listas atualizadas em 02/10/2026.
         local REDEEM_CODES = {
-            "EASTEREXP",
-            "SUB2CAPTAINMAUI",
-            "Enyu_is_Pro",
-            "Starcodeheo",
-            "Sub2Fer999",
-            "Magicbus",
-            "JCWK",
-            "kittgaming",
-            "Bluxxy",
-            "SUB2GAMERROBOT_EXP1",
-            "Axiore",
-            "Sub2Daigrock",
-            "Sub2NoobMaster123",
-            "StrawHatMaine",
-            "TantaiGaming",
-            "TheGreatAce",
-            "Sub2OfficialNoobie",
+            "fudd10", "fudd10_V2", "Chandler", "BIGNEWS", "KITT_RESET",
+            "Sub2UncleKizaru", "SUB2GAMERROBOT_RESET1", "Sub2Fer999", "Enyu_is_Pro",
+            "JCWK", "StarcodeHEO", "MagicBUS", "KittGaming", "Sub2CaptainMaui",
+            "Sub2OfficialNoobie", "TheGreatAce", "Sub2NoobMaster123", "Sub2Daigrock",
+            "Axiore", "StrawHatMaine", "TantaiGaming", "Bluxxy", "SUB2GAMERROBOT_EXP1",
         }
-
-        task.wait(5)
-        print("[Kaitun][2xEXP] A tentar " .. #REDEEM_CODES .. " códigos...")
-
+        local remotes = game:GetService("ReplicatedStorage"):WaitForChild("Remotes")
+        local redeem = remotes:FindFirstChild("Redeem") or remotes:WaitForChild("Redeem", 10)
+        local commF = remotes:FindFirstChild("CommF_")
         for _, code in ipairs(REDEEM_CODES) do
-            local ok, result = pcall(function()
-                return redeem:InvokeServer(code)
+            pcall(function()
+                if redeem then redeem:InvokeServer(code)
+                elseif commF then commF:InvokeServer("Redeem", code) end
             end)
-
-            if ok then
-                print("[Kaitun][2xEXP] Tentado: " .. code)
-            else
-                warn("[Kaitun][2xEXP] Falhou em " .. code .. ": " .. tostring(result))
-            end
-
             task.wait(1)
         end
-
-        print("[Kaitun][2xEXP] Finalizado.")
     end)
 
     -- AUTO RANDOM FRUIT (GACHA - Zioles)
@@ -6662,235 +7231,3 @@ getgenv().VOidAttack = CFG
 
 end
 
---============================================================
--- HEX HUB UI (extraída)
---============================================================
-task.spawn(function()
-    local Players = game:GetService("Players")
-    local TweenService = game:GetService("TweenService")
-    local CoreGui = game:GetService("CoreGui")
-    local LP = Players.LocalPlayer
-    local RS = game:GetService("ReplicatedStorage")
-    local PlayerGui = LP:WaitForChild("PlayerGui")
-    local CommF
-    pcall(function()
-        local Remotes = RS:WaitForChild("Remotes", 5)
-        if Remotes then CommF = Remotes:WaitForChild("CommF_", 5) end
-    end)
-
-    for _, container in ipairs({CoreGui, PlayerGui}) do
-        for _, name in ipairs({"Noguchi Status", "Noguchi Ui", "Noguchi Toggle"}) do
-            pcall(function()
-                local old = container:FindFirstChild(name)
-                if old then old:Destroy() end
-            end)
-        end
-    end
-
-    local UI = {}
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "Noguchi Ui"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.DisplayOrder = 50
-    ScreenGui.IgnoreGuiInset = true
-    ScreenGui.Parent = PlayerGui
-
-    local Frame = Instance.new("Frame", ScreenGui)
-    Frame.AnchorPoint = Vector2.new(0.5, 0.5)
-    Frame.Size = UDim2.new(0, 600, 0, 400)
-    Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-    Frame.BackgroundTransparency = 1
-    Frame.BorderSizePixel = 0
-    Frame.Active = false
-    Frame.Visible = true
-
-    local Frame2 = Instance.new("Frame", Frame)
-    Frame2.AnchorPoint = Vector2.new(0.5, 0.5)
-    Frame2.Size = UDim2.new(1, -47, 1, -47)
-    Frame2.Position = UDim2.new(0.5, 0, 0.5, 0)
-    Frame2.BackgroundColor3 = Color3.new(0, 0, 0)
-    Frame2.BackgroundTransparency = 0.5
-    Frame2.BorderSizePixel = 0
-    Instance.new("UICorner", Frame2).CornerRadius = UDim.new(0, 5)
-
-    local UIStroke = Instance.new("UIStroke", Frame2)
-    UIStroke.Color = Color3.new(255, 255, 255)
-    UIStroke.Thickness = 4
-
-    local UIGradient = Instance.new("UIGradient", UIStroke)
-    UIGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 0)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 0))
-    })
-
-    local function makeLabel(text, pos, size)
-        local lbl = Instance.new("TextLabel", Frame2)
-        lbl.Size = size or UDim2.new(0, 200, 0, 18)
-        lbl.Position = pos
-        lbl.BackgroundTransparency = 1
-        lbl.Text = text
-        lbl.TextColor3 = Color3.new(1, 1, 1)
-        lbl.Font = Enum.Font.GothamBold
-        lbl.TextSize = 16
-        lbl.TextXAlignment = Enum.TextXAlignment.Left
-        lbl.ZIndex = 2
-        return lbl
-    end
-
-    local TextLabel = makeLabel("BombaCat Hub", UDim2.new(0.4, 0, 0.05, 0))
-    local UIGradient2 = Instance.new("UIGradient", TextLabel)
-    UIGradient2.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 0)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 0))
-    })
-
-    local TextLabel2 = makeLabel(" Account Stats ", UDim2.new(0.2, 0, 0.25, 0), UDim2.new(0, 150, 0, 18))
-    TextLabel2.TextSize = 18
-    local UIGradient3 = Instance.new("UIGradient", TextLabel2)
-    UIGradient3.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 0)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 0))
-    })
-
-    local TextLabel3 = makeLabel(" Account Items ", UDim2.new(0.75, 0, 0.25, 0), UDim2.new(0, 150, 0, 18))
-    TextLabel3.TextSize = 18
-    local UIGradient4 = Instance.new("UIGradient", TextLabel3)
-    UIGradient4.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 0)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 0))
-    })
-
-    UI.Level = makeLabel("Level: 0", UDim2.new(0.07, 0, 0.35, 0))
-    UI.Race = makeLabel("Race: ?", UDim2.new(0.07, 0, 0.45, 0))
-    UI.Beli = makeLabel("Beli: 0", UDim2.new(0.07, 0, 0.55, 0))
-    UI.Frag = makeLabel("Frag: 0", UDim2.new(0.07, 0, 0.65, 0))
-    UI.GodHuman = makeLabel("🔴 GodHuman", UDim2.new(0.07, 0, 0.80, 0))
-    UI.CDK = makeLabel("🔴 Cursed Dual Katana", UDim2.new(0.4, 0, 0.80, 0))
-    UI.SkullGuitar = makeLabel("🔴 Skull Guitar", UDim2.new(0.07, 0, 0.90, 0))
-    UI.MirrorFractal = makeLabel("🔴 Mirror Fractal", UDim2.new(0.4, 0, 0.90, 0))
-    UI.Valkyrie = makeLabel("🔴 Valkyrie Helm", UDim2.new(0.75, 0, 0.80, 0), UDim2.new(0, 150, 0, 18))
-    UI.PullLever = makeLabel("🔴 Pull Lever", UDim2.new(0.75, 0, 0.90, 0), UDim2.new(0, 150, 0, 18))
-
-    local CanvasGroup = Instance.new("CanvasGroup", Frame2)
-    CanvasGroup.Size = UDim2.new(0.4, 0, 0.35, 0)
-    CanvasGroup.Position = UDim2.new(0.55, 0, 0.35, 0)
-    CanvasGroup.BackgroundTransparency = 1
-
-    local ScrollingFrame = Instance.new("ScrollingFrame", CanvasGroup)
-    ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-    ScrollingFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    ScrollingFrame.Size = UDim2.new(1, 0, 1, 0)
-    ScrollingFrame.BackgroundTransparency = 1
-    ScrollingFrame.BorderSizePixel = 0
-    ScrollingFrame.ScrollBarImageTransparency = 1
-    ScrollingFrame.ScrollBarThickness = 4
-    ScrollingFrame.ZIndex = 2
-
-    local UIListLayout = Instance.new("UIListLayout", ScrollingFrame)
-    UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    UIListLayout.Padding = UDim.new(0, 2)
-
-    UI.addItemLabel = function(text)
-        local label = Instance.new("TextLabel", ScrollingFrame)
-        label.Size = UDim2.new(1, 0, 0, 18)
-        label.BackgroundTransparency = 1
-        label.Text = text
-        label.TextColor3 = Color3.new(1, 1, 1)
-        label.Font = Enum.Font.GothamBold
-        label.TextSize = 16
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.ZIndex = 2
-        return { Destroy = function() label:Destroy() end }
-    end
-
-    local godhumanUnlocked = false
-    if CommF then
-        task.spawn(function()
-            while not (CommF:InvokeServer("BuyGodhuman") == 1 or CommF:InvokeServer("BuyGodhuman") == 2) do
-                task.wait(3600)
-            end
-            godhumanUnlocked = true
-        end)
-    end
-    UI.getGodHuman = function() return godhumanUnlocked end
-
-    for _, grad in ipairs({UIGradient, UIGradient2, UIGradient3, UIGradient4}) do
-        task.spawn(function()
-            while true do
-                local tween = TweenService:Create(grad, TweenInfo.new(3, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, -1, false, 0), { Rotation = 360 })
-                tween:Play()
-                tween.Completed:Wait()
-                grad.Rotation = 0
-            end
-        end)
-    end
-
-    local ToggleBtn = Instance.new("ImageButton")
-    ToggleBtn.Name = "Noguchi Toggle"
-    ToggleBtn.Size = UDim2.new(0, 55, 0, 55)
-    ToggleBtn.AnchorPoint = Vector2.new(0, 0.5)
-    ToggleBtn.Position = UDim2.new(0, 15, 0.5, 0)
-    ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    ToggleBtn.Image = "rbxthumb://type=Asset&id=113347835552896&w=420&h=420"
-    ToggleBtn.ZIndex = 100
-    ToggleBtn.Draggable = true
-    ToggleBtn.Active = true
-        ToggleBtn.Parent = ScreenGui
-    Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
-    local BtnStroke = Instance.new("UIStroke", ToggleBtn)
-    BtnStroke.Color = Color3.fromRGB(255, 255, 0)
-    BtnStroke.Thickness = 2.5
-    BtnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    ToggleBtn.MouseButton1Click:Connect(function()
-        Frame.Visible = not Frame.Visible
-    end)
-    -- stats (1s)
-    task.spawn(function()
-        while task.wait(1) do
-            pcall(function()
-                local data = LP:FindFirstChild("Data")
-                if data then
-                    UI.Level.Text = "Level: " .. tostring(data:FindFirstChild("Level") and data.Level.Value or 0)
-                    UI.Race.Text = "Race: " .. tostring(data:FindFirstChild("Race") and data.Race.Value or "?")
-                    UI.Beli.Text = "Beli: " .. tostring(data:FindFirstChild("Beli") and data.Beli.Value or 0)
-                    local frags = data:FindFirstChild("Fragments")
-                    UI.Frag.Text = "Frag: " .. (frags and tostring(frags.Value) or "Only Sea 2, 3")
-                end
-            end)
-        end
-    end)
-
-    -- inventario (2s)
-    local _inventoryLabels = {}
-    task.spawn(function()
-        while task.wait(2) do
-            if not CommF then continue end
-            pcall(function()
-                for labelObj in pairs(_inventoryLabels) do pcall(function() labelObj:Destroy() end) end
-                _inventoryLabels = {}
-                local inventory = CommF:InvokeServer("getInventory")
-                if type(inventory) == "table" then
-                    for _, item in pairs(inventory) do
-                        local itemName = item.Name or "?"
-                        local labelObj = UI.addItemLabel(string.format("%s - %s", itemName, item.Count or item.Type or ""))
-                        _inventoryLabels[labelObj] = true
-                        if itemName == "Cursed Dual Katana" then UI.CDK.Text = "🟢 Cursed Dual Katana"
-                        elseif itemName == "Skull Guitar" then UI.SkullGuitar.Text = "🟢 Skull Guitar"
-                        elseif itemName == "Mirror Fractal" then UI.MirrorFractal.Text = "🟢 Mirror Fractal"
-                        elseif itemName == "Valkyrie Helm" then UI.Valkyrie.Text = "🟢 Valkyrie Helm" end
-                    end
-                end
-                UI.GodHuman.Text = UI.getGodHuman() and "🟢 GodHuman" or "🔴 GodHuman"
-                local doorOpen = CommF:InvokeServer("CheckTempleDoor")
-                UI.PullLever.Text = doorOpen and "🟢 Pull Lever" or "🔴 Pull Lever"
-            end)
-        end
-    end)
-
-    getgenv().HexUI = UI
-end)
-
---============================================================
--- INICIAR KAITUN DEPOIS DE TODO O SETUP
---============================================================
-hoangtuveu()
