@@ -47,6 +47,9 @@ Config = {
         GodhumanAtV2Mastery  = 400,
     },
     AutoKen = true,
+    BringMobs = false,
+    BringRadius = 0,
+    BringMaxMobs = 0,
     PanicMode = {
         Enabled          = true,
         LowHealthPercent = 20,
