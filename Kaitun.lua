@@ -2250,9 +2250,9 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         if not Config.BringMobs then return end
         local anchor = BringAnchor
         if not anchor or anchor.Parent ~= workspace:FindFirstChild("Enemies") then return end  -- ignora templates do ReplicatedStorage
-        -- SHANDA / ROYAL SQUAD FIX: desativa o Bring Mobs apenas nestes NPCs.
+        -- SHANDA / ROYAL SQUAD / ROYAL SOLDIER FIX: não usar Bring Mobs nestes alvos.
         -- O ciclo de atração pode interferir quando restam poucos inimigos da missão.
-        if anchor.Name == "Shanda" or anchor.Name == "Royal Squad" then return end
+        if anchor.Name == "Shanda" or anchor.Name == "Royal Squad" or anchor.Name == "Royal Soldier" then return end
         -- Prisoner NPCs: nunca usar como âncora — mas só na ilha da prisão.
         if _isPrisonerBlocked(anchor.Name) then return end
         -- Allow a slightly wider scheduling gap; the attack loop refreshes this
@@ -2286,9 +2286,9 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         for _, v in ipairs(folder:GetChildren()) do
             if pulled >= maxPull then break end
             local isPrisoner = _isPrisonerBlocked(v.Name)
-            local isSpecialNoBring = v.Name == "Shanda" or v.Name == "Royal Squad"
+            local isSpecialNoBring = v.Name == "Shanda" or v.Name == "Royal Squad" or v.Name == "Royal Soldier"
             local isFarmTarget = filterFresh and activeNames[v.Name] or v.Name == anchor.Name
-            -- Não puxar Shandas nem Royal Squads, mesmo como alvos secundários.
+            -- Não puxar Shandas, Royal Squads nem Royal Soldiers, mesmo como alvos secundários.
             if v ~= anchor and not isPrisoner and not isSpecialNoBring and isFarmTarget then
                 local hum  = v:FindFirstChildOfClass("Humanoid")
                 local root = v:FindFirstChild("HumanoidRootPart")
