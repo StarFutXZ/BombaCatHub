@@ -2250,9 +2250,6 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         if not Config.BringMobs then return end
         local anchor = BringAnchor
         if not anchor or anchor.Parent ~= workspace:FindFirstChild("Enemies") then return end  -- ignora templates do ReplicatedStorage
-        -- SHANDA / ROYAL SQUAD / ROYAL SOLDIER FIX: não usar Bring Mobs nestes alvos.
-        -- O ciclo de atração pode interferir quando restam poucos inimigos da missão.
-        if anchor.Name == "Shanda" or anchor.Name == "Royal Squad" or anchor.Name == "Royal Soldier" then return end
         -- Prisoner NPCs: nunca usar como âncora — mas só na ilha da prisão.
         if _isPrisonerBlocked(anchor.Name) then return end
         -- Allow a slightly wider scheduling gap; the attack loop refreshes this
@@ -2286,10 +2283,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         for _, v in ipairs(folder:GetChildren()) do
             if pulled >= maxPull then break end
             local isPrisoner = _isPrisonerBlocked(v.Name)
-            local isSpecialNoBring = v.Name == "Shanda" or v.Name == "Royal Squad" or v.Name == "Royal Soldier"
             local isFarmTarget = filterFresh and activeNames[v.Name] or v.Name == anchor.Name
-            -- Não puxar Shandas, Royal Squads nem Royal Soldiers, mesmo como alvos secundários.
-            if v ~= anchor and not isPrisoner and not isSpecialNoBring and isFarmTarget then
+            if v ~= anchor and not isPrisoner and isFarmTarget then
                 local hum  = v:FindFirstChildOfClass("Humanoid")
                 local root = v:FindFirstChild("HumanoidRootPart")
                 if hum and root and hum.Health > 0
@@ -2336,11 +2331,9 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                         end
                         if st.state == "ghost" then
                             notOwner = notOwner + 1
-                        elseif st.state == "ok" then
-                            -- Só mover depois de confirmar o estado no servidor.
-                            -- Antes, mover durante "probe" fazia a distância parecer 0
-                            -- no cliente e podia confirmar falsamente o NPC; ao atacar
-                            -- vários NPCs assim, o servidor podia rejeitar o pacote inteiro.
+                        else
+                            -- Continua a mover durante "probe" para o NPC poder chegar
+                            -- ao ponto de atração e a verificação conseguir confirmar o estado.
                             pulled = pulled + 1
                             pcall(function()
                                 if dist > 2 then
