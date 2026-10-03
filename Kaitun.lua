@@ -2148,20 +2148,38 @@ end
     local w = require(X):RemoteEvent("RegisterAttack", true)
     local D = require(X):RemoteEvent("RegisterHit", true)
     function h:Attack()
-        local X = {}
-        for y, y in pairs(GetAllBladeHits()) do table.insert(X, y) end
+        local targets = {}
+        for _, mob in pairs(GetAllBladeHits()) do
+            table.insert(targets, mob)
+        end
         if Config.AttackPlayers == true then
-            for y, y in pairs(Getplayerhit()) do table.insert(X, y) end
+            for _, player in pairs(Getplayerhit()) do
+                table.insert(targets, player)
+            end
         end
-        if #X == 0 then return end
-        local y = {[1] = nil, [2] = {}, [4] = "078da5141"}
-        for L, L in pairs(X) do
-            w:FireServer(0)
-            if not y[1] then y[1] = L.Head end
-            table.insert(y[2], {[1] = L, [2] = L.HumanoidRootPart})
-            table.insert(y[2], L)
+        if #targets == 0 then return end
+
+        -- Envia cada alvo numa chamada separada para evitar que o servidor rejeite
+        -- o pacote inteiro quando o Bring agrupa apenas alguns NPCs no mesmo ponto.
+        for _, target in ipairs(targets) do
+            local head = target:FindFirstChild("Head")
+            local root = target:FindFirstChild("HumanoidRootPart")
+            local hum = target:FindFirstChildOfClass("Humanoid")
+            if head and root and hum and hum.Health > 0 then
+                local payload = {
+                    [1] = head,
+                    [2] = {
+                        {[1] = target, [2] = root},
+                        target
+                    },
+                    [4] = "078da5141"
+                }
+                pcall(function()
+                    w:FireServer(0)
+                    D:FireServer(unpack(payload))
+                end)
+            end
         end
-        D:FireServer(unpack(y))
     end
     task.spawn(function()
         while task.wait(.06) do if _G.FastAttack == os.time() then pcall(function() h:Attack() end) end end
