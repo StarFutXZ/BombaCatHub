@@ -2336,7 +2336,11 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                         end
                         if st.state == "ghost" then
                             notOwner = notOwner + 1
-                        else
+                        elseif st.state == "ok" then
+                            -- Só mover depois de confirmar o estado no servidor.
+                            -- Antes, mover durante "probe" fazia a distância parecer 0
+                            -- no cliente e podia confirmar falsamente o NPC; ao atacar
+                            -- vários NPCs assim, o servidor podia rejeitar o pacote inteiro.
                             pulled = pulled + 1
                             pcall(function()
                                 if dist > 2 then
