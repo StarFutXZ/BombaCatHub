@@ -2111,7 +2111,13 @@ end
         for X, X in pairs(workspace.Enemies:GetChildren()) do
             if X:FindFirstChild('Humanoid') and X:FindFirstChild('HumanoidRootPart') and X.Humanoid.Health > 0 and (X.HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 65 then
                 local f = AttackFilterNames
-                if not f or (tick() - (AttackFilterTick or 0)) > 1.5 or f[X.Name] then
+                -- [FIXED v9] mob que o bring acabou de mover e ainda não foi confirmado pelo
+                -- servidor (estado "probe") está num sítio FALSO só no teu cliente. Se for
+                -- incluído no RegisterHit, o servidor vê um alvo fora de alcance e pode
+                -- rejeitar o pacote inteiro (ninguém leva dano) — por isso fica de fora.
+                local bp = BringProbe and BringProbe[X]
+                local unverified = bp ~= nil and bp.state == "probe"
+                if (not unverified) and (not f or (tick() - (AttackFilterTick or 0)) > 1.5 or f[X.Name]) then
                     table.insert(bladehits, X)
                 end
             end
@@ -2210,6 +2216,13 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         return string.find(string.lower(name), "prisoner", 1, true) ~= nil and _onPrisonIsland()
     end
 
+    -- [v8] teste empírico de ownership: estado por mob = probe / ok / ghost
+    BringProbe = setmetatable({}, {__mode = "k"})   -- global: o fast attack também a lê
+    local function _isMineStrict(part)
+        if not isnetworkowner then return false end
+        local ok, res = pcall(isnetworkowner, part)
+        return ok and res == true
+    end
     local _bringSimTick = 0
     local function _isMine(part)
         -- Network ownership APIs differ between executors. Treat errors as
@@ -2224,6 +2237,9 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         if not Config.BringMobs then return end
         local anchor = BringAnchor
         if not anchor or anchor.Parent ~= workspace:FindFirstChild("Enemies") then return end  -- ignora templates do ReplicatedStorage
+        -- SHANDA FIX: desativa o Bring Mobs apenas durante o farm dos Shandas.
+        -- Estes NPCs ficam fora do ciclo de atração para não interferir no ataque.
+        if anchor.Name == "Shanda" then return end
         -- Prisoner NPCs: nunca usar como âncora — mas só na ilha da prisão.
         if _isPrisonerBlocked(anchor.Name) then return end
         -- Allow a slightly wider scheduling gap; the attack loop refreshes this
@@ -2248,6 +2264,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         local target  = aRoot.CFrame
         local aPos    = aRoot.Position
         local pulled  = 0
+        local notOwner = 0
         -- Use the names passed to the current CombatController.Attack call.
         -- If that short-lived filter is unavailable, fall back to the anchor's name.
         local activeNames = AttackFilterNames
@@ -2256,33 +2273,75 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         for _, v in ipairs(folder:GetChildren()) do
             if pulled >= maxPull then break end
             local isPrisoner = _isPrisonerBlocked(v.Name)
+            local isShanda = v.Name == "Shanda"
             local isFarmTarget = filterFresh and activeNames[v.Name] or v.Name == anchor.Name
             -- Na ilha da prisão nunca puxar os prisioneiros, mesmo que o nome esteja no filtro.
-            if v ~= anchor and not isPrisoner and isFarmTarget then
+            if v ~= anchor and not isPrisoner and not isShanda and isFarmTarget then
                 local hum  = v:FindFirstChildOfClass("Humanoid")
                 local root = v:FindFirstChild("HumanoidRootPart")
                 if hum and root and hum.Health > 0
                    and (root.Position - aPos).Magnitude <= radius then
-                    -- Do not let a transient network-ownership check prevent all
-                    -- attempts to bring a valid farm target. Protect per-NPC writes
-                    -- so one rejected property does not stop the remaining NPCs.
-                    pulled = pulled + 1
-                    pcall(function()
-                        -- Move only the NPC root. Avoid forcing Humanoid into Physics
-                        -- or changing its movement stats, which can interfere with hit
-                        -- registration and normal NPC combat behaviour.
-                        if (root.Position - aPos).Magnitude > 2 then
-                            root.CFrame = target
+                    -- [FIXED v8] TESTE EMPÍRICO DE OWNERSHIP (isnetworkowner() falha/mente em
+                    -- vários executors e com ele o bring deixou de puxar). Puxa-se o mob e
+                    -- vê-se o que acontece: se ao fim de 0.35s ele continua junto ao ponto de
+                    -- atração, o servidor aceitou a posição (ok); se voltou ao sítio dele, é um
+                    -- "fantasma" (só se mexia no teu ecrã): deixa de ser puxado durante 8s e
+                    -- depois volta a ser testado. Fantasmas = mobs que o servidor não te deu.
+                    local now  = tick()
+                    local st   = BringProbe[v]
+                    local dist = (root.Position - aPos).Magnitude
+                    local skip = false
+                    if st and st.state == "ghost" then
+                        if now >= st.untilT then
+                            BringProbe[v] = nil
+                            st = nil
+                        else
+                            skip = true
+                            notOwner = notOwner + 1
                         end
-                        root.CanCollide = false
-                        root.AssemblyLinearVelocity  = Vector3.zero
-                        root.AssemblyAngularVelocity = Vector3.zero
-                        local head = v:FindFirstChild("Head")
-                        if head then head.CanCollide = false end
-                    end)
+                    end
+                    if not skip then
+                        if not st then
+                            st = {t0 = now, state = "probe", bad = 0}
+                            BringProbe[v] = st
+                        end
+                        if st.state == "probe" then
+                            if now - st.t0 > 0.35 then
+                                if dist < 8 or _isMineStrict(root) then
+                                    st.state = "ok"
+                                else
+                                    st.state = "ghost"; st.untilT = now + 8
+                                end
+                            end
+                        elseif st.state == "ok" then
+                            if dist > 20 and not _isMineStrict(root) then
+                                st.bad = st.bad + 1
+                                if st.bad > 20 then st.state = "ghost"; st.untilT = now + 8; st.bad = 0 end
+                            else
+                                st.bad = 0
+                            end
+                        end
+                        if st.state == "ghost" then
+                            notOwner = notOwner + 1
+                        else
+                            pulled = pulled + 1
+                            pcall(function()
+                                if dist > 2 then
+                                    root.CFrame = target
+                                end
+                                root.CanCollide = false
+                                root.AssemblyLinearVelocity  = Vector3.zero
+                                root.AssemblyAngularVelocity = Vector3.zero
+                                local head = v:FindFirstChild("Head")
+                                if head then head.CanCollide = false end
+                            end)
+                        end
+                    end
                 end
             end
         end
+        BringDbgText = "Bring: " .. pulled .. " puxados, " .. notOwner .. " fantasma"
+        BringDbgTick = tick()
     end
 
     game:GetService("RunService").Heartbeat:Connect(function()
@@ -2356,7 +2415,15 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         local enemiesFolder = workspace:FindFirstChild("Enemies")
         for _, entity in GetMonAsSortedRange() do
             if entity.Parent == enemiesFolder and table.find(names, entity.Name) and entity:FindFirstChild("Humanoid") and entity.Humanoid.Health > 0 then
-                if (entity:GetAttribute('FailureCount') or 0) < 3 then
+                -- Shanda: não deixar FailureCount antigo excluir os últimos NPCs vivos.
+                -- Ao restarem poucos mobs, os restantes podem herdar falhas de tentativas
+                -- anteriores; continuar a selecioná-los evita cair no template do spawn.
+                if entity.Name == "Shanda" then
+                    entity:SetAttribute("FailureCount", 0)
+                    entity:SetAttribute("IgnoreGrab", nil)
+                    anyFound = true
+                    table.insert(candidates, entity)
+                elseif (entity:GetAttribute('FailureCount') or 0) < 3 then
                     anyFound = true
                     table.insert(candidates, entity)
                 end
@@ -2366,6 +2433,19 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         if anyFound then
             local best = candidates[1]
             return best
+        end
+        -- [FIXED v7] anti-stuck: se TODOS os mobs deste nome foram marcados como
+        -- falhados (FailureCount>=3), o script ficava parado para sempre. Limpa a
+        -- marca de 10 em 10 s (exceto "Prisoner": esses são marcados de propósito).
+        if enemiesFolder and tick() - (FailResetTick or 0) > 10 then
+            FailResetTick = tick()
+            for _, entity in ipairs(enemiesFolder:GetChildren()) do
+                if entity.Name ~= "Prisoner" and table.find(names, entity.Name)
+                   and (entity:GetAttribute('FailureCount') or 0) >= 3 then
+                    entity:SetAttribute('FailureCount', 0)
+                    entity:SetAttribute('IgnoreGrab', nil)
+                end
+            end
         end
         for _, npcName in names do
             local npc = game.ReplicatedStorage:FindFirstChild(npcName)
@@ -2437,7 +2517,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                         AtkDbgTick = tick()
                         pcall(function()
                             local real = MonResult.Parent == workspace:FindFirstChild("Enemies")
-                            SetTask('SubTask', '⚔️ Attacking ' .. tostring(MonResult.Name) .. (real and '' or ' [à espera de mob no spawn]'))
+                            local dbg = (BringDbgText and tick() - (BringDbgTick or 0) < 2) and (' | ' .. BringDbgText) or ''
+                            SetTask('SubTask', '⚔️ Attacking ' .. tostring(MonResult.Name) .. (real and '' or ' [à espera de mob no spawn]') .. dbg)
                         end)
                     end
 
@@ -3646,9 +3727,13 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             local foundMob = false
             for _, folder in ipairs({workspace.Enemies, game.ReplicatedStorage}) do
                 for _, v2 in ipairs(folder:GetChildren()) do
-                    if v2.Name == "Shanda" and v2:IsA("Model") then
+                    if folder == workspace.Enemies and v2.Name == "Shanda" and v2:IsA("Model") then
                         local hum = v2:FindFirstChildOfClass("Humanoid")
-                        if hum and hum.Health > 0 then
+                        local root = v2:FindFirstChild("HumanoidRootPart")
+                        if hum and root and hum.Health > 0 then
+                            -- Limpa o bloqueio antigo apenas neste NPC da missão.
+                            v2:SetAttribute("FailureCount", 0)
+                            v2:SetAttribute("IgnoreGrab", nil)
                             foundMob = true
                             SetTask("SubTask", "⚔️ Attacking Shanda")
                             CombatController.Attack("Shanda")
