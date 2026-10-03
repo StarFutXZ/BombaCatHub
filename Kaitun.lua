@@ -2124,13 +2124,11 @@ end
         for X, X in pairs(workspace.Enemies:GetChildren()) do
             if X:FindFirstChild('Humanoid') and X:FindFirstChild('HumanoidRootPart') and X.Humanoid.Health > 0 and (X.HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 65 then
                 local f = AttackFilterNames
-                -- [FIXED v9] mob que o bring acabou de mover e ainda não foi confirmado pelo
-                -- servidor (estado "probe") está num sítio FALSO só no teu cliente. Se for
-                -- incluído no RegisterHit, o servidor vê um alvo fora de alcance e pode
-                -- rejeitar o pacote inteiro (ninguém leva dano) — por isso fica de fora.
-                local bp = BringProbe and BringProbe[X]
-                local unverified = bp ~= nil and bp.state == "probe"
-                if (not unverified) and (not f or (tick() - (AttackFilterTick or 0)) > 1.5 or f[X.Name]) then
+                -- Mantém o filtro da missão, mas não exclui automaticamente NPCs em
+                -- estado "probe": quando o grupo tem só 4 NPCs, isso podia deixar o
+                -- FastAttack sem alvos até aparecer outro NPC. A distância <=65 acima
+                -- continua a limitar os alvos ao alcance local.
+                if (not f or (tick() - (AttackFilterTick or 0)) > 1.5 or f[X.Name]) then
                     table.insert(bladehits, X)
                 end
             end
