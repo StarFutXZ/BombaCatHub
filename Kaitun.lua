@@ -2347,8 +2347,15 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     function CombatController.Search(names)
         local candidates = {}
         local anyFound = false
+        -- [FIXED] GetMonAsSortedRange() mistura os mobs reais com os "templates" do
+        -- ReplicatedStorage e ordena só por distância: se o template estivesse mais
+        -- perto que qualquer mob vivo, ele era escolhido e o script ficava a voar
+        -- ao pé do ponto de spawn "a atacar" sem nada para matar. Agora só os mobs
+        -- reais (workspace.Enemies) contam; o template fica como último recurso
+        -- (abaixo), para ir até ao spawn quando não há mobs vivos.
+        local enemiesFolder = workspace:FindFirstChild("Enemies")
         for _, entity in GetMonAsSortedRange() do
-            if table.find(names, entity.Name) and entity:FindFirstChild("Humanoid") and entity.Humanoid.Health > 0 then
+            if entity.Parent == enemiesFolder and table.find(names, entity.Name) and entity:FindFirstChild("Humanoid") and entity.Humanoid.Health > 0 then
                 if (entity:GetAttribute('FailureCount') or 0) < 3 then
                     anyFound = true
                     table.insert(candidates, entity)
@@ -2424,6 +2431,14 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                             MonResult = real
                             BringSetAnchor(real)
                         end
+                    end
+
+                    if not X and tick() - (AtkDbgTick or 0) > 1 then
+                        AtkDbgTick = tick()
+                        pcall(function()
+                            local real = MonResult.Parent == workspace:FindFirstChild("Enemies")
+                            SetTask('SubTask', '⚔️ Attacking ' .. tostring(MonResult.Name) .. (real and '' or ' [à espera de mob no spawn]'))
+                        end)
                     end
 
                     if ScriptStorage.Tools["Sweet Chalice"] and getsenv(game.ReplicatedStorage.GuideModule)["_G"]["InCombat"] then
