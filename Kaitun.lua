@@ -6755,7 +6755,12 @@ task.spawn(function()
     getgenv().HexUI = UI
 end)
 
-hoangtuveu()
+--============================================================
+-- [FIXED] EXTRAS (Gacha, códigos, no animation) movidos para ANTES de
+-- hoangtuveu(): essa função tem o loop principal infinito, por isso tudo
+-- o que ficava depois dela nunca chegava a correr (era por isso que o
+-- script não girava fruta). O bloco corre em task.spawn: não bloqueia.
+--============================================================
 --============================================================
 -- [EXTRAS] NO ANIMATION + AUTO REDEEM CODES + AUTO RANDOM FRUIT (GACHA)
 -- Opções (pode editar/desligar):
@@ -6856,6 +6861,7 @@ task.spawn(function()
     }
 end)
 
+hoangtuveu()
 --============================================================
 -- [VOID ATTACK] ATAQUE ENVIADO PELO USUARIO
 --============================================================
