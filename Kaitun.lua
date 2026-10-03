@@ -48,8 +48,10 @@ Config = {
     },
     AutoKen = true,
     BringMobs = true,
-    -- Bring mobs from across nearby islands, but only names in the active farm target list.
-    BringRadius = 800,
+    -- [v10] Os hubs testados puxam a 250-350 studs e o jogo parece ter uma "trela" (leash):
+    -- um mob arrastado para longe do spawn deixa de levar dano. 800 era demasiado.
+    BringRadius = 300,   -- distância máx. (mob -> mob de referência) para puxar
+    BringLeash  = 300,   -- distância máx. do SPAWN do mob (atributo OldPosition) ao ponto de atração
     BringMaxMobs = 30,
     PanicMode = {
         Enabled          = true,
@@ -1696,7 +1698,7 @@ end
     -- Agora: UM loop no Heartbeat move o block em direção a FlyCtl.Goal a
     -- velocidade constante (dt-based). Create() só actualiza o alvo.
     -- Se detectar rubber-band, reduz a velocidade sozinho e recupera depois.
-    -- Config opcional: FlySpeed (def. 230), FlySpeedMax (def. 290, só em
+    -- Config opcional: FlySpeed (def. 200), FlySpeedMax (def. 260, só em
     -- distâncias longas), OrbitDegPerSec (def. 120).
     -- ============================================================
     FlyCtl = {
@@ -1704,8 +1706,8 @@ end
         Penalty = 1, PenaltyUntil = 0, LastSet = nil, LastBackoff = 0, WasOn = false,
     }
     function FlyCtl.SpeedFor(dist)
-        local base = Config.FlySpeed or 230
-        local maxs = Config.FlySpeedMax or 290
+        local base = Config.FlySpeed or 200
+        local maxs = Config.FlySpeedMax or 260
         local t = math.clamp((dist - 600) / 2400, 0, 1)
         return (base + (maxs - base) * t) * FlyCtl.Penalty
     end
@@ -2124,11 +2126,13 @@ end
         for X, X in pairs(workspace.Enemies:GetChildren()) do
             if X:FindFirstChild('Humanoid') and X:FindFirstChild('HumanoidRootPart') and X.Humanoid.Health > 0 and (X.HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 65 then
                 local f = AttackFilterNames
-                -- Mantém o filtro da missão, mas não exclui automaticamente NPCs em
-                -- estado "probe": quando o grupo tem só 4 NPCs, isso podia deixar o
-                -- FastAttack sem alvos até aparecer outro NPC. A distância <=65 acima
-                -- continua a limitar os alvos ao alcance local.
-                if (not f or (tick() - (AttackFilterTick or 0)) > 1.5 or f[X.Name]) then
+                -- [FIXED v9] mob que o bring acabou de mover e ainda não foi confirmado pelo
+                -- servidor (estado "probe") está num sítio FALSO só no teu cliente. Se for
+                -- incluído no RegisterHit, o servidor vê um alvo fora de alcance e pode
+                -- rejeitar o pacote inteiro (ninguém leva dano) — por isso fica de fora.
+                local bp = BringProbe and BringProbe[X]
+                local unverified = bp ~= nil and bp.state == "probe"
+                if (not unverified) and (not f or (tick() - (AttackFilterTick or 0)) > 1.5 or f[X.Name]) then
                     table.insert(bladehits, X)
                 end
             end
@@ -2147,39 +2151,55 @@ end
     local X = (Services.ReplicatedStorage.Modules.Net)
     local w = require(X):RemoteEvent("RegisterAttack", true)
     local D = require(X):RemoteEvent("RegisterHit", true)
+    -- [FIXED v10] FORMATO DO PACOTE DE HIT ADAPTATIVO.
+    -- Sintoma: com 4 mobs juntos nada morre, com mais de 4 morre. Não há fonte pública
+    -- que explique o formato que o servidor aceita, por isso o script testa 4 formatos
+    -- e fica com o que tira vida (roda sozinho se nada levar dano durante ~1.4s ao alcance):
+    --   S1 = original (1 RegisterAttack POR ALVO, pares + modelo duplicado)
+    --   S2 = 1 RegisterAttack no total, só pares {modelo, HRP}
+    --   S3 = 1 RegisterAttack no total, pares + modelo duplicado
+    --   S4 = 1 RegisterAttack POR ALVO, só pares
+    -- Além disso o alvo mais PRÓXIMO vai primeiro (y[1] = a Head dele): antes era o
+    -- 1.º de workspace.Enemies, que podia ser um mob a 60+ studs.
+    HitStrategy = 1
+    HitStrategyTick = 0
+    HIT_STRATEGIES = {
+        {perTargetAttack = true,  dupModel = true },
+        {perTargetAttack = false, dupModel = false},
+        {perTargetAttack = false, dupModel = true },
+        {perTargetAttack = true,  dupModel = false},
+    }
+    function RotateHitStrategy(reason)
+        if tick() - HitStrategyTick < 1.5 then return end
+        HitStrategyTick = tick()
+        HitStrategy = HitStrategy % #HIT_STRATEGIES + 1
+        pcall(print, "[BombaCat Hub] formato de hit -> S" .. HitStrategy .. " (" .. tostring(reason) .. ")")
+    end
     function h:Attack()
-        local targets = {}
-        for _, mob in pairs(GetAllBladeHits()) do
-            table.insert(targets, mob)
-        end
+        local X = {}
+        for y, y in pairs(GetAllBladeHits()) do table.insert(X, y) end
         if Config.AttackPlayers == true then
-            for _, player in pairs(Getplayerhit()) do
-                table.insert(targets, player)
-            end
+            for y, y in pairs(Getplayerhit()) do table.insert(X, y) end
         end
-        if #targets == 0 then return end
-
-        -- Envia cada alvo numa chamada separada para evitar que o servidor rejeite
-        -- o pacote inteiro quando o Bring agrupa apenas alguns NPCs no mesmo ponto.
-        for _, target in ipairs(targets) do
-            local head = target:FindFirstChild("Head")
-            local root = target:FindFirstChild("HumanoidRootPart")
-            local hum = target:FindFirstChildOfClass("Humanoid")
-            if head and root and hum and hum.Health > 0 then
-                local payload = {
-                    [1] = head,
-                    [2] = {
-                        {[1] = target, [2] = root},
-                        target
-                    },
-                    [4] = "078da5141"
-                }
-                pcall(function()
-                    w:FireServer(0)
-                    D:FireServer(unpack(payload))
-                end)
-            end
+        if #X == 0 then return end
+        local me = game.Players.LocalPlayer.Character
+        local myRoot = me and me:FindFirstChild("HumanoidRootPart")
+        if myRoot then
+            local mp = myRoot.Position
+            table.sort(X, function(m1, m2)
+                return (m1.HumanoidRootPart.Position - mp).Magnitude < (m2.HumanoidRootPart.Position - mp).Magnitude
+            end)
         end
+        local st = HIT_STRATEGIES[HitStrategy] or HIT_STRATEGIES[1]
+        local y = {[1] = nil, [2] = {}, [4] = "078da5141"}
+        if not st.perTargetAttack then w:FireServer(0) end
+        for _, L in ipairs(X) do
+            if st.perTargetAttack then w:FireServer(0) end
+            if not y[1] then y[1] = L.Head end
+            table.insert(y[2], {[1] = L, [2] = L.HumanoidRootPart})
+            if st.dupModel then table.insert(y[2], L) end
+        end
+        D:FireServer(unpack(y))
     end
     task.spawn(function()
         while task.wait(.06) do if _G.FastAttack == os.time() then pcall(function() h:Attack() end) end end
@@ -2266,6 +2286,9 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         if not Config.BringMobs then return end
         local anchor = BringAnchor
         if not anchor or anchor.Parent ~= workspace:FindFirstChild("Enemies") then return end  -- ignora templates do ReplicatedStorage
+        -- SHANDA / ROYAL SQUAD / ROYAL SOLDIER FIX: não usar Bring Mobs nestes alvos.
+        -- O ciclo de atração pode interferir quando restam poucos inimigos da missão.
+        if anchor.Name == "Shanda" or anchor.Name == "Royal Squad" or anchor.Name == "Royal Soldier" then return end
         -- Prisoner NPCs: nunca usar como âncora — mas só na ilha da prisão.
         if _isPrisonerBlocked(anchor.Name) then return end
         -- Allow a slightly wider scheduling gap; the attack loop refreshes this
@@ -2285,12 +2308,17 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             pcall(function() sethiddenproperty(LocalPlayer, "MaximumSimulationRadius", math.huge) end)
         end
 
-        local radius  = Config.BringRadius or 800
+        local radius  = Config.BringRadius or 300
+        local leash   = Config.BringLeash or 300
         local maxPull = Config.BringMaxMobs or 30
         local target  = aRoot.CFrame
         local aPos    = aRoot.Position
         local pulled  = 0
         local notOwner = 0
+        local immune  = 0
+        local pChar   = game.Players.LocalPlayer.Character
+        local pRoot   = pChar and pChar:FindFirstChild("HumanoidRootPart")
+        local plPos   = pRoot and pRoot.Position
         -- Use the names passed to the current CombatController.Attack call.
         -- If that short-lived filter is unavailable, fall back to the anchor's name.
         local activeNames = AttackFilterNames
@@ -2299,11 +2327,18 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         for _, v in ipairs(folder:GetChildren()) do
             if pulled >= maxPull then break end
             local isPrisoner = _isPrisonerBlocked(v.Name)
+            local isSpecialNoBring = v.Name == "Shanda" or v.Name == "Royal Squad" or v.Name == "Royal Soldier"
             local isFarmTarget = filterFresh and activeNames[v.Name] or v.Name == anchor.Name
-            if v ~= anchor and not isPrisoner and isFarmTarget then
+            -- Não puxar Shandas, Royal Squads nem Royal Soldiers, mesmo como alvos secundários.
+            if v ~= anchor and not isPrisoner and not isSpecialNoBring and isFarmTarget then
                 local hum  = v:FindFirstChildOfClass("Humanoid")
                 local root = v:FindFirstChild("HumanoidRootPart")
-                if hum and root and hum.Health > 0
+                -- [FIXED v10] "trela" do jogo: um mob arrastado para longe do SPAWN dele (atributo
+                -- OldPosition) deixa de levar dano. Só puxa se o ponto de atração estiver a
+                -- <= BringLeash do spawn do mob; os outros ficam onde estão (vêm um a um).
+                local spawnPos = v:GetAttribute("OldPosition")
+                local beyondLeash = typeof(spawnPos) == "Vector3" and (aPos - spawnPos).Magnitude > leash
+                if hum and root and hum.Health > 0 and not beyondLeash
                    and (root.Position - aPos).Magnitude <= radius then
                     -- [FIXED v8] TESTE EMPÍRICO DE OWNERSHIP (isnetworkowner() falha/mente em
                     -- vários executors e com ele o bring deixou de puxar). Puxa-se o mob e
@@ -2321,7 +2356,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                             st = nil
                         else
                             skip = true
-                            notOwner = notOwner + 1
+                            if st.immune then immune = immune + 1 else notOwner = notOwner + 1 end
                         end
                     end
                     if not skip then
@@ -2345,11 +2380,29 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                                 st.bad = 0
                             end
                         end
+                        -- [v10] WATCHDOG de imunes: empilhado, ao alcance, os hits a entrar noutro
+                        -- mob (HitLandedTick recente) e este sem perder vida >3.5s = leash/escudo.
+                        -- Devolve-o ao spawn e não o puxa durante 30s ("held + hit with no HP
+                        -- change for 3s = put back" é o que fazem os hubs testados).
+                        if st.state == "ok" then
+                            local hpNow = hum.Health
+                            if st.hp == nil or hpNow < st.hp - 0.01 then
+                                st.hp = hpNow; st.hpT = now
+                            elseif plPos and (root.Position - plPos).Magnitude <= 60
+                                   and now - (HitLandedTick or 0) < 1.5 then
+                                if now - (st.hpT or now) > 3.5 then
+                                    if typeof(spawnPos) == "Vector3" then
+                                        pcall(function() root.CFrame = CFrame.new(spawnPos) end)
+                                    end
+                                    st.state = "ghost"; st.untilT = now + 30; st.immune = true
+                                end
+                            else
+                                st.hpT = now
+                            end
+                        end
                         if st.state == "ghost" then
-                            notOwner = notOwner + 1
+                            if st.immune then immune = immune + 1 else notOwner = notOwner + 1 end
                         else
-                            -- Continua a mover durante "probe" para o NPC poder chegar
-                            -- ao ponto de atração e a verificação conseguir confirmar o estado.
                             pulled = pulled + 1
                             pcall(function()
                                 if dist > 2 then
@@ -2366,7 +2419,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 end
             end
         end
-        BringDbgText = "Bring: " .. pulled .. " puxados, " .. notOwner .. " fantasma"
+        BringDbgText = "Bring: " .. pulled .. " puxados, " .. notOwner .. " fantasma, " .. immune .. " imunes | Hit S" .. tostring(HitStrategy)
         BringDbgTick = tick()
     end
 
@@ -2506,6 +2559,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 local h, w = 0, os.time()
                 SetTask('SubTask', '⚔️ Attacking ' .. tostring(MonResult.Name))
                 local w, b = 0, os.time()
+                local lastHP, lastDmgT, inRangeT = nil, tick(), nil
                 while task.wait() do
                     if _G.Stop then return end
 
@@ -2558,6 +2612,12 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                         if MonResult.Name == "Don Swan" then Storage:Set("SwanDefeated", true) end
                         break
                     end
+                    -- [v10] regista quando o alvo perde vida (os hits estão a entrar)
+                    if lastHP == nil or C.Health < lastHP - 0.01 then
+                        lastDmgT = tick()
+                        HitLandedTick = tick()
+                    end
+                    lastHP = C.Health
                     -- Keep the Bring anchor alive throughout approach and attack,
                     -- not only after reaching the 150-stud combat radius.
                     if MonResult.Parent == workspace:FindFirstChild("Enemies") then
@@ -2568,6 +2628,17 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                         y = D and D()
                         CombatController.Grab(L or '')
                         BringKeepAlive()
+                        -- [v10] ao alcance (<=60) há ~1.4s e o alvo não perde vida: o formato
+                        -- do pacote de hit não está a ser aceite -> tenta o seguinte.
+                        if CaculateDistance(p.Position) <= 60 then
+                            if not inRangeT then inRangeT = tick(); lastDmgT = math.max(lastDmgT, inRangeT) end
+                            if MonResult.Name ~= "Core" and tick() - lastDmgT > 1.4 then
+                                RotateHitStrategy("sem dano ao alcance")
+                                lastDmgT = tick()
+                            end
+                        else
+                            inRangeT = nil
+                        end
                         if MonResult.Name ~= "Core" then
                             if ScriptStorage.PlayerData.Level > 100 and w >= CombatController.MAX_ATTACK_DURATION_2 and C.Health - C.MaxHealth == 0 then
                                 SetTask('SubTask', 'Hop Server - Mob Health Unchanged ( ' .. C.Health .. ' / ' .. C.MaxHealth .. ')')
@@ -6988,3 +7059,383 @@ task.spawn(function()
 end)
 
 hoangtuveu()
+--============================================================
+-- [VOID ATTACK] ATAQUE ENVIADO PELO USUARIO
+--============================================================
+do
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
+local RS_Remotes = ReplicatedStorage:WaitForChild("Remotes")
+
+local RE_ShootGunEvent = Net:WaitForChild("RE/ShootGunEvent")
+local RE_RegisterAttack = Net:WaitForChild("RE/RegisterAttack")
+local RE_RegisterHit = Net:WaitForChild("RE/RegisterHit")
+local GunValidator = RS_Remotes:WaitForChild("Validator2")
+
+local SUCCESS_SHOOT, SHOOT_FUNCTION = pcall(function()
+    return getupvalue(require(ReplicatedStorage.Controllers.CombatController).Attack, 9)
+end)
+
+local capturedChild, RemoteId = nil, nil
+
+local function tryCapture(parent)
+    if not parent then return end
+    for _, item in ipairs(parent:GetChildren()) do
+        if item:IsA("RemoteEvent") then
+            local attr = item:GetAttribute("Id")
+            if attr then
+                RemoteId, capturedChild = attr, item
+                return true
+            end
+        end
+    end
+    return false
+end
+
+for _, name in ipairs({"Util","Common","Remotes","Assets","FX"}) do
+    local c = ReplicatedStorage:FindFirstChild(name)
+    if c then
+        tryCapture(c)
+        c.ChildAdded:Connect(function(ch)
+            if ch:IsA("RemoteEvent") and ch:GetAttribute("Id") then
+                RemoteId, capturedChild = ch:GetAttribute("Id"), ch
+            end
+        end)
+    end
+end
+
+getgenv().VOidAttack = getgenv().VOidAttack or {}
+local CFG = getgenv().VOidAttack
+
+CFG.Enabled          = CFG.Enabled          ~= false
+CFG.Range            = CFG.Range            or 90
+CFG.AttackPlayers    = CFG.AttackPlayers    ~= false
+CFG.AttackMobs       = CFG.AttackMobs       ~= false
+CFG.MultiHitCount    = CFG.MultiHitCount    or 3
+CFG.MultiHitDelay    = CFG.MultiHitDelay    or 0.02
+CFG.LoopDelay        = CFG.LoopDelay        or 0.01
+CFG.MeleeDelay       = CFG.MeleeDelay       or 0.12
+CFG.UseObfuscated    = CFG.UseObfuscated    ~= false
+CFG.VisualActivate   = CFG.VisualActivate   ~= false
+CFG.Paralyze         = CFG.Paralyze         ~= false
+CFG.ParalyzeTick     = CFG.ParalyzeTick     or 0.01
+CFG.ResetCooldown    = CFG.ResetCooldown    ~= false
+
+CFG.HitboxLimbs = CFG.HitboxLimbs or {
+    "RightLowerArm","RightUpperArm","LeftLowerArm","LeftUpperArm",
+    "RightHand","LeftHand","RightLowerLeg","LeftLowerLeg",
+    "RightUpperLeg","LeftUpperLeg","RightFoot","LeftFoot",
+    "Head","Torso","HumanoidRootPart"
+}
+
+local function GetValidator2()
+    if not SUCCESS_SHOOT or not SHOOT_FUNCTION then
+        return math.random(1, 99999999), 1
+    end
+
+    local v53 = getupvalue(SHOOT_FUNCTION, 13)
+    local v54 = getupvalue(SHOOT_FUNCTION, 14)
+    local v55 = getupvalue(SHOOT_FUNCTION, 15)
+    local v56 = getupvalue(SHOOT_FUNCTION, 16)
+    local v57 = getupvalue(SHOOT_FUNCTION, 17)
+    local v58 = getupvalue(SHOOT_FUNCTION, 18)
+    local v59 = getupvalue(SHOOT_FUNCTION, 19)
+
+    local v93 = v53 * v54
+    local v96 = (v55 * v54 + v53 * v56) % v57
+    v96 = (v96 * v57 + v93) % v58
+    v55 = math.floor(v96 / v57)
+    v53 = v96 - v55 * v57
+    v59 = v59 + 1
+
+    setupvalue(SHOOT_FUNCTION, 13, v53)
+    setupvalue(SHOOT_FUNCTION, 15, v55)
+    setupvalue(SHOOT_FUNCTION, 19, v59)
+
+    return math.floor(v96 / v58 * 16777215), v59
+end
+
+local function isAlive(m)
+    local h = m and m:FindFirstChildOfClass("Humanoid")
+    return h and h.Health > 0
+end
+
+local function getHitbox(m)
+    for _ = 1, 6 do
+        local name = CFG.HitboxLimbs[math.random(#CFG.HitboxLimbs)]
+        local part = m:FindFirstChild(name)
+        if part and part:IsA("BasePart") then return part end
+    end
+    return m:FindFirstChild("HumanoidRootPart")
+end
+
+local function collectTargets(char)
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return {} end
+    local pos = root.Position
+    local list = {}
+
+    local function scan(folder)
+        if not folder then return end
+        for _, e in ipairs(folder:GetChildren()) do
+            if e ~= char and isAlive(e) then
+                local rp = e:FindFirstChild("HumanoidRootPart")
+                if rp and (rp.Position - pos).Magnitude <= CFG.Range then
+                    list[#list + 1] = e
+                end
+            end
+        end
+    end
+
+    if CFG.AttackMobs    then scan(workspace:FindFirstChild("Enemies"))    end
+    if CFG.AttackPlayers then scan(workspace:FindFirstChild("Characters")) end
+    return list
+end
+
+local function buildConfig(targets)
+    local cfg = {}
+    for _, e in ipairs(targets) do
+        local part = getHitbox(e)
+        if part then cfg[#cfg + 1] = {e, part} end
+    end
+    return cfg
+end
+
+local function fireStandard(targets)
+    local cfg = buildConfig(targets)
+    if #cfg == 0 then return end
+
+    local primary = cfg[1][1]:FindFirstChild("Head")
+                    or cfg[1][1]:FindFirstChild("HumanoidRootPart")
+    if not primary then return end
+
+    RE_RegisterAttack:FireServer(0)
+    RE_RegisterHit:FireServer(primary, cfg)
+end
+
+local function fireObfuscated(targets)
+    if not (CFG.UseObfuscated and capturedChild and RemoteId) then return end
+    local cfg = buildConfig(targets)
+    if #cfg == 0 then return end
+
+    local primary = cfg[1][1]:FindFirstChild("Head")
+                    or cfg[1][1]:FindFirstChild("HumanoidRootPart")
+    if not primary then return end
+
+    pcall(function()
+        RE_RegisterAttack:FireServer()
+        local key1 = string.gsub("RE/RegisterHit", ".", function(ch)
+            return string.char(bit32.bxor(string.byte(ch),
+                math.floor(workspace:GetServerTimeNow() / 10 % 10) + 1))
+        end)
+        local seed = Net.seed:InvokeServer() * 2
+        local key2 = bit32.bxor(RemoteId + 909090, seed)
+        cloneref(capturedChild):FireServer(key1, key2, primary, cfg)
+    end)
+end
+
+local function clearAllCooldowns(tool)
+    if not (CFG.ResetCooldown and tool) then return end
+    pcall(function()
+        for _, v in ipairs(tool:GetDescendants()) do
+            if v:IsA("NumberValue") then
+                local n = v.Name:lower()
+                if n:find("cooldown") or n:find("cd") or n:find("reload") then
+                    v.Value = 0
+                end
+            end
+        end
+    end)
+end
+
+local paralyzedMobs = {}
+
+local function paralyzeMob(mob)
+    if not CFG.Paralyze or not mob or not mob.Parent then return end
+
+    local hrp = mob:FindFirstChild("HumanoidRootPart")
+    local hum = mob:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+
+    local stored = paralyzedMobs[mob]
+    local lockedPos = stored and stored.pos or hrp.Position
+    if not stored then
+        paralyzedMobs[mob] = { pos = lockedPos }
+    end
+
+    pcall(function()
+        if setnetworkowner then setnetworkowner(mob, false) end
+    end)
+
+    pcall(function()
+        hrp.Velocity = Vector3.zero
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        hrp.CFrame = CFrame.new(lockedPos, lockedPos + hrp.CFrame.LookVector)
+    end)
+
+    pcall(function()
+        hum.WalkSpeed = 0
+        hum.JumpPower = 0
+        hum.JumpHeight = 0
+        hum.AutoRotate = false
+    end)
+
+    pcall(function()
+        local bp = hrp:FindFirstChild("VOidLock")
+        if not bp then
+            bp = Instance.new("BodyPosition")
+            bp.Name = "VOidLock"
+            bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bp.P = 200000
+            bp.D = 1000
+            bp.Position = lockedPos
+            bp.Parent = hrp
+        else
+            bp.Position = lockedPos
+        end
+
+        local bg = hrp:FindFirstChild("VOidGyro")
+        if not bg then
+            bg = Instance.new("BodyGyro")
+            bg.Name = "VOidGyro"
+            bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            bg.P = 200000
+            bg.D = 1000
+            bg.CFrame = CFrame.new(lockedPos, lockedPos + hrp.CFrame.LookVector)
+            bg.Parent = hrp
+        else
+            bg.CFrame = CFrame.new(lockedPos, lockedPos + hrp.CFrame.LookVector)
+        end
+    end)
+end
+
+local function clearParalyze(mob)
+    if not mob then return end
+    local hrp = mob:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    pcall(function()
+        if hrp:FindFirstChild("VOidLock") then hrp.VOidLock:Destroy() end
+        if hrp:FindFirstChild("VOidGyro") then hrp.VOidGyro:Destroy() end
+    end)
+    paralyzedMobs[mob] = nil
+end
+
+local function attackMelee(char, tool, targets)
+    for _, t in ipairs(targets) do paralyzeMob(t) end
+
+    for i = 1, CFG.MultiHitCount do
+        task.spawn(function()
+            fireStandard(targets)
+            fireObfuscated(targets)
+        end)
+        if i < CFG.MultiHitCount then task.wait(CFG.MultiHitDelay) end
+    end
+
+    if CFG.VisualActivate and tool then
+        pcall(function() tool:Activate() end)
+    end
+end
+
+local function attackFruit(char, tool, targets)
+    for _, t in ipairs(targets) do paralyzeMob(t) end
+
+    local remote = tool:FindFirstChild("LeftClickRemote")
+    if not remote then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local trp  = targets[1]:FindFirstChild("HumanoidRootPart")
+    if not (root and trp) then return end
+    local dir = (trp.Position - root.Position).Unit
+    pcall(function() remote:FireServer(dir, 1) end)
+end
+
+local function attackGun(char, tool, targets)
+    for _, t in ipairs(targets) do paralyzeMob(t) end
+
+    local hrp = targets[1]:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    clearAllCooldowns(tool)
+
+    pcall(function()
+        tool:SetAttribute("LocalTotalShots", (tool:GetAttribute("LocalTotalShots") or 0) + 1)
+    end)
+
+    pcall(function()
+        GunValidator:FireServer(GetValidator2())
+    end)
+
+    pcall(function()
+        RE_ShootGunEvent:FireServer(hrp.Position, { hrp })
+    end)
+end
+
+local lastMelee = 0
+
+task.spawn(function()
+    while task.wait(CFG.LoopDelay) do
+        if not CFG.Enabled then continue end
+
+        local char = LocalPlayer.Character
+        if not char or not isAlive(char) then continue end
+
+        local tool = char:FindFirstChildOfClass("Tool")
+        if not tool then continue end
+
+        local tip = tool.ToolTip
+        local now = os.clock()
+
+        if tip == "Melee" or tip == "Sword" then
+            if now - lastMelee >= CFG.MeleeDelay then
+                local targets = collectTargets(char)
+                if #targets > 0 then
+                    lastMelee = now
+                    pcall(attackMelee, char, tool, targets)
+                end
+            end
+
+        elseif tip == "Blox Fruit" then
+            local targets = collectTargets(char)
+            if #targets > 0 then pcall(attackFruit, char, tool, targets) end
+
+        elseif tip == "Gun" then
+            local targets = collectTargets(char)
+            if #targets > 0 then pcall(attackGun, char, tool, targets) end
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait(CFG.ParalyzeTick) do
+        if not CFG.Enabled or not CFG.Paralyze then continue end
+
+        local char = LocalPlayer.Character
+        if not char then continue end
+
+        local tool = char:FindFirstChildOfClass("Tool")
+        if not tool then continue end
+
+        local tip = tool.ToolTip
+        if tip ~= "Melee" and tip ~= "Sword" and tip ~= "Gun" and tip ~= "Blox Fruit" then
+            continue
+        end
+
+        local targets = collectTargets(char)
+        for _, t in ipairs(targets) do paralyzeMob(t) end
+
+        for mob in pairs(paralyzedMobs) do
+            if not mob.Parent or not isAlive(mob) then
+                clearParalyze(mob)
+            end
+        end
+    end
+end)
+
+getgenv().VOidAttack = CFG
+
+end
+
