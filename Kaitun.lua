@@ -1903,9 +1903,7 @@ end
         local char = game.Players.LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then return true end
-        -- Nunca retomar o voo direto enquanto ainda estamos dentro da cidade.
-        -- Mantém o controlo da saída mesmo se o portal demorar a responder.
-        if os.time() < UWX.fallbackUntil then UWX.fallbackUntil = 0 end
+        if not Config.WhirlpoolNoFallback and os.time() < UWX.fallbackUntil then return false end
 
         local entry = UWX_ENTRIES[(UWX.step % #UWX_ENTRIES) + 1]
         pcall(function() SetTask("SubTask", "Portal -> sair da Underwater City") end)
@@ -1925,8 +1923,8 @@ end
             UWX.step = UWX.step + 1                     -- tenta o outro ponto do portal
             if UWX.attempts >= 6 then
                 UWX.attempts = 0
-                UWX.fallbackUntil = 0
-                pcall(function() Report("Portal: ainda dentro da Underwater City; continuo a tentar a saída") end)
+                UWX.fallbackUntil = os.time() + 60
+                pcall(function() Report("Portal: 6 tentativas sem sair da Underwater City") end)
             end
         else
             UWX.attempts = 0
@@ -2634,10 +2632,13 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
 
     FunctionsHandler.MeleesController:RegisterMethod("Refresh", function()
         if not Config.Items.AutoFullyMelees or not Config.Melee.AutoBuy then return nil end
-        -- Até ao nível 300, as primeiras melee ainda estão bloqueadas por nível.
-        -- Não ativar este controlador antes disso: deixa o dispatcher executar
-        -- LevelFarm normalmente em vez de ficar preso em "Cần Player Level 300".
-        if (ScriptStorage.PlayerData.Level or 0) < 300 then return nil end
+        -- Dark Step (Black Leg) pode ser comprado no Sea 1 assim que houver 150k Beli.
+        -- Antes do nível 300, só ativar este controlador para essa compra específica;
+        -- caso contrário, deixar o LevelFarm continuar normalmente.
+        local beliNow = ScriptStorage.PlayerData.Beli or 0
+        local needsDarkStep = not CheckItem("Black Leg")
+        local canBuyDarkStepSea1 = SeaIndex == 1 and needsDarkStep and beliNow >= 150000
+        if (ScriptStorage.PlayerData.Level or 0) < 300 and not canBuyDarkStepSea1 then return nil end
         -- [FIXED] Bỏ "if _G.Level then return nil end" — đây là khóa VĨNH VIỄN,
         -- một khi thiếu tiền 1 lần là MeleesController tắt luôn mãi mãi vì
         -- không có chỗ nào khác set lại _G.Level = false. Bỏ hẳn cờ này,
@@ -2682,7 +2683,11 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
 
     FunctionsHandler.MeleesController:RegisterMethod("Start", function()
         if not Config.Items.AutoFullyMelees or not Config.Melee.AutoBuy then return end
-        if ScriptStorage.PlayerData.Level < 200 then return end
+        -- Permitir comprar Dark Step no Sea 1 assim que houver 150k, mesmo antes do nível 200.
+        local canBuyDarkStepSea1 = SeaIndex == 1
+            and not CheckItem("Black Leg")
+            and (ScriptStorage.PlayerData.Beli or 0) >= 150000
+        if ScriptStorage.PlayerData.Level < 200 and not canBuyDarkStepSea1 then return end
 
         local meleeList = {
             -- [FIXED - LỖI NỀN TẢNG] Trước đây key = "BuyBlackLeg" v.v. —
@@ -2692,7 +2697,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             -- BuyMelee so sánh W=="DragonClaw"/"Godhuman" (không "Buy...")
             -- nên trước đây KHÔNG BAO GIỜ khớp, luôn rơi vào nhánh generic
             -- sai. Bỏ hẳn tiền tố "Buy" khỏi key — để BuyMelee tự thêm.
-            {name = "Black Leg", key = "BlackLeg", price = {Beli = 150000}, levelReq = 300},
+            {name = "Black Leg", key = "BlackLeg", price = {Beli = 150000}, levelReq = nil}, -- Dark Step no Sea 1: comprar ao ter 150k Beli
             {name = "Electro", key = "Electro", price = {Beli = 500000}, levelReq = 300},
             {name = "Fishman Karate", key = "FishmanKarate", price = {Beli = 750000}, levelReq = 300},
             {name = "Dragon Claw", key = "DragonClaw", price = {Fragments = 1500}, levelReq = 300},
