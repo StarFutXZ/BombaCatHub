@@ -1295,31 +1295,23 @@ end
     end)
     task.spawn(function()
         task.wait(3)
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HasBuso") then return end
+        if LocalPlayer.Character:FindFirstChild("HasBuso") then return end
         Remotes.CommF_:InvokeServer("Buso")
     end)
+    print(1)
 
-    -- BombaCat Hub FIX: vigiar o Haki do Armamento continuamente,
-    -- em vez de tentar ativá-lo apenas ao entrar/morrer/renascer.
+    -- [ALTERACAO AUTORIZADA] Verifica continuamente o Haki do Armamento.
+    -- Se for desligado durante a vida, volta a ativar sem esperar pela morte.
     task.spawn(function()
         while task.wait(1) do
             pcall(function()
                 local character = LocalPlayer.Character
-                if not character then return end
-
-                local hasBuso = character:FindFirstChild("HasBuso") ~= nil
-                local hasBusoTag = false
-                pcall(function()
-                    hasBusoTag = LocalPlayer:HasTag("Buso")
-                end)
-
-                if not hasBuso and not hasBusoTag then
+                if character and not character:FindFirstChild("HasBuso") then
                     Remotes.CommF_:InvokeServer("Buso")
                 end
             end)
         end
     end)
-    print(1)
 
     -- ============================================================
     -- BẢNG MELEE & DATA (GIỮ NGUYÊN)
