@@ -47,7 +47,7 @@ Config = {
         GodhumanAtV2Mastery  = 400,
     },
     AutoKen = true,
-    BringMobs = true,
+    BringMobs = false,  -- desligado (BringEnemy sai logo; CombatController.GRAB também está false)
     -- Bring mobs from across nearby islands, but only names in the active farm target list.
     BringRadius = 800,
     BringMaxMobs = 30,
