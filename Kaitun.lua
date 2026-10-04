@@ -54,7 +54,7 @@ Config = {
     BringRadius = 800,
     BringMaxMobs = 2,
     PanicMode = {
-        Enabled          = false,
+        Enabled          = true,
         LowHealthPercent = 20,
         SafeHealthPercent = 75,
         EscapeHeight     = 2000,
@@ -2960,6 +2960,11 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             end
 
             local cf = locs[SeaIndex]
+            -- [FIX] Usar a posição REAL do NPC (se carregado) em vez de só a coordenada fixa
+            pcall(function()
+                local npc = ScriptStorage.NPCs and ScriptStorage.NPCs[teacher]
+                if npc and npc:IsDescendantOf(workspace) and npc.WorldPivot then cf = npc.WorldPivot * CFrame.new(0, 0, 4) end
+            end)
             if not cf then
                 if SeaIndex ~= 3 then
                     Remotes.CommF_:InvokeServer("TravelZou")
@@ -3126,9 +3131,25 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                         return
                     end
                     SetTask('MainTask', 'Auto Full Melee | Mua ' .. melee.name)
-                    local checkResult = BuyMelee(melee.key, true)  -- Bước 1: check (proxy ghi vào J nếu hợp lệ)
-                    task.wait(0.3)
-                    BuyMelee(melee.key)                            -- Bước 2: mua thật (kích hoạt proxy auto-navigate + invoke thật)
+                    if melee.name == "Electro" then
+                        -- [FIX] Electro: compra direta (sem o proxy que, perto do NPC, deixava a compra parada)
+                        -- e mostra a resposta do servidor para sabermos o motivo se falhar.
+                        local CommF = Services.ReplicatedStorage.Remotes.CommF_
+                        local function inv(...)
+                            local ok, r = pcall(function(...) return CommF:InvokeServer(...) end, ...)
+                            return ok and r or ("erro: " .. tostring(r))
+                        end
+                        local chk = inv("BuyElectro", true)
+                        task.wait(0.5)
+                        local res = inv("BuyElectro")
+                        SetTask('SubTask', 'Electro | check=' .. tostring(chk) .. ' compra=' .. tostring(res))
+                        print("[BombaCat Hub] Electro check=", chk, " compra=", res)
+                        task.wait(1)
+                    else
+                        local checkResult = BuyMelee(melee.key, true)  -- Bước 1: check (proxy ghi vào J nếu hợp lệ)
+                        task.wait(0.3)
+                        BuyMelee(melee.key)                            -- Bước 2: mua thật (kích hoạt proxy auto-navigate + invoke thật)
+                    end
                     task.wait(0.5)
                     if CheckItem(melee.name) then
                         SetTask('MainTask', 'Auto Full Melee | ✅ Mua thành công ' .. melee.name)
