@@ -108,7 +108,7 @@ local CoreGui = game:GetService("CoreGui")
 local lp = Players.LocalPlayer
 
 
-print("[BombaCat Hub] A iniciar...")
+print("[BombaCat Hub] A iniciar... BUILD v17 (NPC via ReplicatedStorage)")
 timeee = os.time()
 local W_angle = 30
 local lastChange = tick()
