@@ -2939,6 +2939,16 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             local locs = TeacherLocations[teacher]
             if not locs then return true end
 
+            -- [FIX] Electro: se estiver no Sea 2/3, volta ao Sea 1 para o comprar
+            if meleeName == "Electro" and SeaIndex ~= 1 then
+                SetTask('MainTask', 'Auto Full Melee | A voltar ao Sea 1 para comprar o Electro')
+                if tick() - (_G.__LastTravelMain or 0) > 15 then
+                    _G.__LastTravelMain = tick()
+                    Remotes.CommF_:InvokeServer("TravelMain")
+                end
+                return false
+            end
+
             local cf = locs[SeaIndex]
             if not cf then
                 if SeaIndex ~= 3 then
@@ -2959,6 +2969,11 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             if _G.Stop then return end
 
             local bp = CheckItem(melee.name)
+            if not bp and melee.name == "Electro"
+               and (ScriptStorage.Melees["Black Leg"] or 0) < (Config.Melee.RaidAtV1Mastery or 500) then
+                -- [FIX] Electro só depois do Dark Step chegar ao mastery alvo (500)
+                continue
+            end
             if not bp then
                 -- [NEW] Dragon Claw V1 cần riêng 1500 Fragments — nếu chưa
                 -- đủ thì đây chính là lý do phải farm raid (raid cho
@@ -4338,12 +4353,48 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         return true -- 1.8s liên tục không thấy sống lại — chắc chắn chết
     end
 
+    -- ============================================================
+    -- [FIX] Só farmar boss se AINDA for preciso.
+    -- Antes: a lista de bosses nunca era filtrada (o filtro estava dentro de
+    -- UtillyItemsActivitation, que nunca corria), por isso matava sempre
+    -- qualquer boss que estivesse spawnado, mesmo com o item já na conta.
+    -- Agora: respeita Config.BossWeapons[boss]=false e salta o boss se o item
+    -- que ele dá já existe (ou se não queres o item).
+    -- ============================================================
+    local function _has(name)
+        local ok, r = pcall(function()
+            return (ScriptStorage.Backpack and ScriptStorage.Backpack[name])
+                or (ScriptStorage.Melees and ScriptStorage.Melees[name])
+                or (CheckItem and CheckItem(name))
+        end)
+        return ok and r and true or false
+    end
+    local BossDropRules = {
+        ["Awakened Ice Admiral"] = function() return _has("Rengoku") end,
+        ["Tide Keeper"]          = function() return _has("Sharkman Karate") or _has("Water Key") end,
+        ["Deandre"]              = function() return _has("Yama") end,
+        ["Urban"]                = function() return _has("Yama") end,
+        ["Diablo"]               = function() return _has("Yama") end,
+        ["Soul Reaper"]          = function() return _has("Hallow Scythe") end,
+        ["Darkbeard"]            = function() return _has("Soul Guitar") or Config.Items.SoulGuitar == false end,
+        ["Beautiful Pirates"]    = function() return _has("Canvander") end,
+    }
+    function BossStillNeeded(bossName)
+        if Config.BossWeapons[bossName] == false then return false end
+        local rule = BossDropRules[bossName]
+        if rule and rule() then return false end
+        for item, d in pairs(DropItemData) do
+            if d.Boss == bossName and _has(item) then return false end
+        end
+        return true
+    end
+
     FunctionsHandler.BossesTask:RegisterMethod("Refresh", function()
         local k
         for h, h in BossesOrder do
             -- [FIXED] Thêm gate Config.BossWeapons — trước đây không có cách
             -- nào tắt farm 1 boss cụ thể, giờ set Config.BossWeapons[name]=false là bỏ qua
-            if Config.BossWeapons[h] ~= false then
+            if Config.BossWeapons[h] ~= false and BossStillNeeded(h) then
                 local X = BossesOrderLevel[h]
                 if ScriptStorage.PlayerData.Level >= X then
                     local X = ScriptStorage.Enemies[h]
@@ -4370,12 +4421,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 if k.Parent == nil or (k:FindFirstChild("Humanoid") and k.Humanoid.Health <= 0) then
                     -- [FIXED] Xác nhận chết thật trước khi reset (tránh false-positive lúc chuyển phase)
                     if ConfirmBossDead(k.Name) then
-                        SetTask('SubTask', '✅ Đã hạ ' .. k.Name .. ' — reset về farm level')
-                        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                        if hum then
-                            hum.Health = 0
-                            LocalPlayer.CharacterAdded:Wait()
-                        end
+                        -- [FIX] Já NÃO faz reset ao personagem: morrer depois do boss fazia perder o drop.
+                        SetTask('SubTask', '✅ Boss morto: ' .. k.Name)
                     else
                         SetTask('SubTask', k.Name .. ' đang chuyển phase — tiếp tục đánh')
                     end
@@ -4391,7 +4438,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         local k
         for h, X in SpecialBossesOrder do
             -- [FIXED] Cùng gate Config.BossWeapons như BossesTask
-            if Config.BossWeapons[h] ~= false and ScriptStorage.PlayerData.Level >= X then
+            if Config.BossWeapons[h] ~= false and BossStillNeeded(h) and ScriptStorage.PlayerData.Level >= X then
                 local X = ScriptStorage.Enemies[h]
                 if X and X:FindFirstChild('Humanoid') and X.Humanoid.Health > 0 then k = X end
             end
@@ -4426,12 +4473,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 if k.Parent == nil or (k:FindFirstChild("Humanoid") and k.Humanoid.Health <= 0) then
                     -- [FIXED] Xác nhận chết thật trước khi reset (tránh false-positive lúc chuyển phase)
                     if ConfirmBossDead(k.Name) then
-                        SetTask('SubTask', '✅ Đã hạ ' .. k.Name .. ' — reset về farm level')
-                        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                        if hum then
-                            hum.Health = 0
-                            LocalPlayer.CharacterAdded:Wait()
-                        end
+                        -- [FIX] Já NÃO faz reset ao personagem: morrer depois do boss fazia perder o drop.
+                        SetTask('SubTask', '✅ Boss morto: ' .. k.Name)
                     else
                         SetTask('SubTask', k.Name .. ' đang chuyển phase — tiếp tục đánh')
                     end
@@ -4554,12 +4597,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         pcall(function()
             if boss.Parent == nil or (boss:FindFirstChild("Humanoid") and boss.Humanoid.Health <= 0) then
                 if ConfirmBossDead(sw.boss) then
-                    SetTask('SubTask', '✅ Đã hạ ' .. sw.boss .. ' — reset về farm level')
-                    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        hum.Health = 0
-                        LocalPlayer.CharacterAdded:Wait()
-                    end
+                    -- [FIX] sem reset ao personagem (fazia perder o drop)
+                    SetTask('SubTask', '✅ Boss morto: ' .. sw.boss)
                 else
                     SetTask('SubTask', sw.boss .. ' đang chuyển phase — tiếp tục đánh')
                 end
@@ -4665,12 +4704,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                         -- [FIXED] Đây chính xác là case boss man báo — Cake Prince
                         -- ("Hải Tặc Đào Hoa") chuyển phase 2, code cũ tưởng chết
                         if ConfirmBossDead("Cake Prince") then
-                            SetTask('SubTask', '✅ Đã hạ Cake Prince — reset về farm level')
-                            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                            if hum then
-                                hum.Health = 0
-                                LocalPlayer.CharacterAdded:Wait()
-                            end
+                            -- [FIX] sem reset ao personagem (fazia perder o drop)
+                            SetTask('SubTask', '✅ Cake Prince morto')
                         else
                             SetTask('SubTask', 'Cake Prince đang chuyển phase — tiếp tục đánh')
                         end
@@ -6412,7 +6447,11 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         local DOOR_CF = CFrame.new(1347.71, 37.38, -1325.65)
         while task.wait(1) do
             local needSaber = Config.Items.Saber and not ScriptStorage.Backpack.Saber and not (CheckItem and CheckItem("Saber"))
-            if Config.AutoSea2 and not needSaber and (ScriptStorage.PlayerData.Level or 0) >= 700 and SeaIndex == 1 then
+            -- [FIX] Dark Step no mastery alvo e sem Electro: ficar/voltar ao Sea 1 até o comprar
+            local needElectro = Config.Items.AutoFullyMelees and Config.Melee.AutoBuy
+                and not (CheckItem and CheckItem("Electro"))
+                and (ScriptStorage.Melees["Black Leg"] or 0) >= (Config.Melee.RaidAtV1Mastery or 500)
+            if Config.AutoSea2 and not needSaber and not needElectro and (ScriptStorage.PlayerData.Level or 0) >= 700 and SeaIndex == 1 then
                 local ok, err = pcall(function()
                     _G.SeaTransitionActive = true
                     local prog = Remotes.CommF_:InvokeServer("DressrosaQuestProgress")
