@@ -2780,7 +2780,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         local beliNow = ScriptStorage.PlayerData.Beli or 0
         local needsDarkStep = not CheckItem("Black Leg")
         local canBuyDarkStepSea1 = SeaIndex == 1 and needsDarkStep and beliNow >= 150000
-        if (ScriptStorage.PlayerData.Level or 0) < 300 and not canBuyDarkStepSea1 then return nil end
+        local canBuyElectro = not CheckItem("Electro") and beliNow >= 500000 -- [FIX] Electro assim que houver 500k Beli
+        if (ScriptStorage.PlayerData.Level or 0) < 300 and not canBuyDarkStepSea1 and not canBuyElectro then return nil end
         -- [FIXED] Bỏ "if _G.Level then return nil end" — đây là khóa VĨNH VIỄN,
         -- một khi thiếu tiền 1 lần là MeleesController tắt luôn mãi mãi vì
         -- không có chỗ nào khác set lại _G.Level = false. Bỏ hẳn cờ này,
@@ -2805,10 +2806,6 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         -- LevelFarm para continuar a ganhar XP, Beli e mastery em vez de parar.
         for _, name in ipairs(allMelees) do
             if not CheckItem(name) then
-                if name == "Electro" and (ScriptStorage.Melees["Black Leg"] or 0) < 500 then
-                    return nil
-                end
-
                 local data = MeleePrices[name]
                 local price = data and data.Price or {}
                 local beli = ScriptStorage.PlayerData.Beli or 0
@@ -2829,7 +2826,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         local canBuyDarkStepSea1 = SeaIndex == 1
             and not CheckItem("Black Leg")
             and (ScriptStorage.PlayerData.Beli or 0) >= 150000
-        if ScriptStorage.PlayerData.Level < 200 and not canBuyDarkStepSea1 then return end
+        local canBuyElectro = not CheckItem("Electro") and (ScriptStorage.PlayerData.Beli or 0) >= 500000
+        if ScriptStorage.PlayerData.Level < 200 and not canBuyDarkStepSea1 and not canBuyElectro then return end
 
         local meleeList = {
             -- [FIXED - LỖI NỀN TẢNG] Trước đây key = "BuyBlackLeg" v.v. —
@@ -2840,7 +2838,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             -- nên trước đây KHÔNG BAO GIỜ khớp, luôn rơi vào nhánh generic
             -- sai. Bỏ hẳn tiền tố "Buy" khỏi key — để BuyMelee tự thêm.
             {name = "Black Leg", key = "BlackLeg", price = {Beli = 150000}, levelReq = nil}, -- Dark Step no Sea 1: comprar ao ter 150k Beli
-            {name = "Electro", key = "Electro", price = {Beli = 500000}, levelReq = 300},
+            {name = "Electro", key = "Electro", price = {Beli = 500000}, levelReq = nil},
             {name = "Fishman Karate", key = "FishmanKarate", price = {Beli = 750000}, levelReq = 300},
             {name = "Dragon Claw", key = "DragonClaw", price = {Fragments = 1500}, levelReq = 300},
             {name = "Superhuman", key = "Superhuman", price = {Beli = 3000000}, levelReq = nil, needMastery = {item = "Dragon Claw", value = 300}},
@@ -2969,11 +2967,6 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             if _G.Stop then return end
 
             local bp = CheckItem(melee.name)
-            if not bp and melee.name == "Electro"
-               and (ScriptStorage.Melees["Black Leg"] or 0) < (Config.Melee.RaidAtV1Mastery or 500) then
-                -- [FIX] Electro só depois do Dark Step chegar ao mastery alvo (500)
-                continue
-            end
             if not bp then
                 -- [NEW] Dragon Claw V1 cần riêng 1500 Fragments — nếu chưa
                 -- đủ thì đây chính là lý do phải farm raid (raid cho
@@ -6447,10 +6440,10 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         local DOOR_CF = CFrame.new(1347.71, 37.38, -1325.65)
         while task.wait(1) do
             local needSaber = Config.Items.Saber and not ScriptStorage.Backpack.Saber and not (CheckItem and CheckItem("Saber"))
-            -- [FIX] Dark Step no mastery alvo e sem Electro: ficar/voltar ao Sea 1 até o comprar
+            -- [FIX] Com 500k Beli e sem Electro: ficar/voltar ao Sea 1 até o comprar
             local needElectro = Config.Items.AutoFullyMelees and Config.Melee.AutoBuy
                 and not (CheckItem and CheckItem("Electro"))
-                and (ScriptStorage.Melees["Black Leg"] or 0) >= (Config.Melee.RaidAtV1Mastery or 500)
+                and (ScriptStorage.PlayerData.Beli or 0) >= 500000
             if Config.AutoSea2 and not needSaber and not needElectro and (ScriptStorage.PlayerData.Level or 0) >= 700 and SeaIndex == 1 then
                 local ok, err = pcall(function()
                     _G.SeaTransitionActive = true
