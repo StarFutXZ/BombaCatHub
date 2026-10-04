@@ -1,3 +1,4 @@
+local __UserConfig = (type(Config) == "table") and Config or nil -- config definida pelo utilizador ANTES do loadstring
 Config = {
     Team = "Pirates",
     Configuration = {
@@ -47,7 +48,7 @@ Config = {
         GodhumanAtV2Mastery  = 400,
     },
     AutoKen = true,
-    BringMobs = true,
+    BringMobs = false,
     -- Bring mobs from across nearby islands, but only names in the active farm target list.
     BringRadius = 800,
     BringMaxMobs = 30,
@@ -65,6 +66,36 @@ Config = {
     AutoSea3 = true,
     AutoRaidIce_TargetFragments = 5000,
 }
+-- ============================================================
+-- [ADDED] CONFIG EXTERNA: o utilizador define Config = {...} antes do loadstring
+-- e isso sobrepõe os valores por defeito acima (sem mexer no código).
+-- Aceita formato completo (Items = {...}) e formato plano estilo Banana
+-- (CursedDualKatana = false diretamente em Config).
+-- ============================================================
+do
+    local function merge(dst, src)
+        for k, v in pairs(src) do
+            if type(v) == "table" and type(dst[k]) == "table" then
+                merge(dst[k], v)
+            else
+                dst[k] = v
+            end
+        end
+    end
+    if __UserConfig and __UserConfig ~= Config then
+        local flat = {}
+        for k, v in pairs(__UserConfig) do
+            if type(v) == "boolean" or type(v) == "number" then
+                if Config.Items[k] ~= nil then Config.Items[k] = v
+                elseif Config.Configuration[k] ~= nil then Config.Configuration[k] = v
+                else flat[k] = v end
+            end
+        end
+        merge(Config, __UserConfig)
+        for k, v in pairs(flat) do Config[k] = v end
+    end
+end
+
 print("[BombaCat Hub] Script carregado, a esperar o jogo carregar...")
 repeat task.wait() until game:IsLoaded()
 
@@ -74,6 +105,123 @@ local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 
 local lp = Players.LocalPlayer
+
+-- ============================================================
+-- [ADDED] PAINEL NO TOPO: ligar/desligar itens em tempo real
+-- Toca em "BombaCat Hub" no topo do ecrã para abrir/fechar.
+-- Os botões mexem diretamente na tabela Config (lida em loop pelo script).
+-- ============================================================
+task.spawn(function()
+    task.wait(6) -- esperar o resto do script criar Config.Extras
+    local ok, err = pcall(function()
+        local parent = (gethui and gethui()) or CoreGui
+        local old = parent:FindFirstChild("BombaCatItemsUI")
+        if old then old:Destroy() end
+
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "BombaCatItemsUI"
+        gui.ResetOnSpawn = false
+        gui.IgnoreGuiInset = true
+        gui.DisplayOrder = 999
+        local okParent = pcall(function() gui.Parent = parent end)
+        if not okParent then gui.Parent = lp:WaitForChild("PlayerGui") end
+
+        local header = Instance.new("TextButton")
+        header.Size = UDim2.new(0, 240, 0, 32)
+        header.AnchorPoint = Vector2.new(0.5, 0)
+        header.Position = UDim2.new(0.5, 0, 0, 4)
+        header.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+        header.TextColor3 = Color3.fromRGB(255, 200, 0)
+        header.Font = Enum.Font.GothamBold
+        header.TextSize = 15
+        header.Text = "BombaCat Hub  ▼"
+        header.Parent = gui
+        Instance.new("UICorner", header).CornerRadius = UDim.new(0, 8)
+
+        local panel = Instance.new("ScrollingFrame")
+        panel.Size = UDim2.new(0, 240, 0, 260)
+        panel.AnchorPoint = Vector2.new(0.5, 0)
+        panel.Position = UDim2.new(0.5, 0, 0, 40)
+        panel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        panel.BackgroundTransparency = 0.1
+        panel.BorderSizePixel = 0
+        panel.ScrollBarThickness = 4
+        panel.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        panel.CanvasSize = UDim2.new(0, 0, 0, 0)
+        panel.Visible = false
+        panel.Parent = gui
+        Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 8)
+
+        local layout = Instance.new("UIListLayout", panel)
+        layout.Padding = UDim.new(0, 4)
+        layout.SortOrder = Enum.SortOrder.LayoutOrder
+        local pad = Instance.new("UIPadding", panel)
+        pad.PaddingTop = UDim.new(0, 4); pad.PaddingBottom = UDim.new(0, 4)
+        pad.PaddingLeft = UDim.new(0, 4); pad.PaddingRight = UDim.new(0, 4)
+
+        header.MouseButton1Click:Connect(function()
+            panel.Visible = not panel.Visible
+            header.Text = panel.Visible and "BombaCat Hub  ▲" or "BombaCat Hub  ▼"
+        end)
+
+        local order = 0
+        local function nextOrder() order = order + 1; return order end
+
+        local function addTitle(text)
+            local t = Instance.new("TextLabel")
+            t.Size = UDim2.new(1, 0, 0, 22)
+            t.BackgroundTransparency = 1
+            t.Font = Enum.Font.GothamBold
+            t.TextSize = 13
+            t.TextColor3 = Color3.fromRGB(255, 200, 0)
+            t.TextXAlignment = Enum.TextXAlignment.Left
+            t.Text = text
+            t.LayoutOrder = nextOrder()
+            t.Parent = panel
+        end
+
+        local function addToggle(tbl, key)
+            local b = Instance.new("TextButton")
+            b.Size = UDim2.new(1, 0, 0, 30)
+            b.Font = Enum.Font.Gotham
+            b.TextSize = 13
+            b.TextColor3 = Color3.new(1, 1, 1)
+            b.LayoutOrder = nextOrder()
+            b.Parent = panel
+            Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+            local function refresh()
+                local on = tbl[key] == true
+                b.Text = tostring(key) .. "   [" .. (on and "ON" or "OFF") .. "]"
+                b.BackgroundColor3 = on and Color3.fromRGB(35, 120, 55) or Color3.fromRGB(130, 40, 40)
+            end
+            b.MouseButton1Click:Connect(function()
+                tbl[key] = not (tbl[key] == true)
+                refresh()
+            end)
+            refresh()
+        end
+
+        local function addSection(title, tbl)
+            if type(tbl) ~= "table" then return end
+            local keys = {}
+            for k, v in pairs(tbl) do
+                if type(v) == "boolean" then table.insert(keys, k) end
+            end
+            if #keys == 0 then return end
+            table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+            addTitle(title)
+            for _, k in ipairs(keys) do addToggle(tbl, k) end
+        end
+
+        addSection("ITENS", Config.Items)
+        addSection("ESPADAS", Config.Sword)
+        addSection("ARMAS DE BOSS", Config.BossWeapons)
+        addSection("EXTRAS", Config.Extras)
+        addSection("GERAL", Config)
+        addSection("MELEE", Config.Melee)
+    end)
+    if not ok then warn("[BombaCat Hub] Painel falhou:", err) end
+end)
 
 print("[BombaCat Hub] A iniciar...")
 timeee = os.time()
@@ -6901,12 +7049,22 @@ end)
 --============================================================
 -- [EXTRAS] NO ANIMATION + AUTO REDEEM CODES + AUTO RANDOM FRUIT (GACHA)
 -- Opções (pode editar/desligar):
-Config.Extras = {
-    NoAnimation      = true,   -- desliga as animações do personagem
-    AutoRedeemCodes  = true,   -- resgata todos os códigos no início
-    AutoGachaFruit   = true,   -- rola o Gacha (Random Fruit) automaticamente
-    GachaInterval    = 5,      -- segundos entre cada checagem do gacha
-}
+do
+    local ExtrasDefault = {
+        NoAnimation      = true,   -- desliga as animações do personagem
+        AutoRedeemCodes  = true,   -- resgata todos os códigos no início
+        AutoGachaFruit   = true,   -- rola o Gacha (Random Fruit) automaticamente
+        GachaInterval    = 5,      -- segundos entre cada checagem do gacha
+    }
+    local user = type(Config.Extras) == "table" and Config.Extras or {}
+    Config.Extras = user
+    for k, v in pairs(ExtrasDefault) do
+        if user[k] == nil then
+            -- aceita também formato plano: Config = { AutoGachaFruit = false }
+            if type(Config[k]) == type(v) then user[k] = Config[k] else user[k] = v end
+        end
+    end
+end
 --============================================================
 task.spawn(function()
     local Players = game:GetService("Players")
