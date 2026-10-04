@@ -45,6 +45,7 @@ Config = {
         AutoBuy              = true,
         CheckMasteryAfterBuy = true,
         RaidAtV1Mastery      = 400,
+        BoltQuestAlreadyAccepted = false, -- põe true se já falaste com o Mad Scientist e aceitaste a quest
         ElectroAtDarkStepMastery = 400, -- [FIX] Dark Step (Black Leg) precisa deste mastery antes de comprar o Electro
         GodhumanAtV2Mastery  = 400,
     },
@@ -108,7 +109,7 @@ local CoreGui = game:GetService("CoreGui")
 local lp = Players.LocalPlayer
 
 
-print("[BombaCat Hub] A iniciar... BUILD v18 (dialogo Mad Scientist)")
+print("[BombaCat Hub] A iniciar... BUILD v19 (quest ja aceite)")
 timeee = os.time()
 local W_angle = 30
 local lastChange = tick()
@@ -3151,7 +3152,13 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                             -- [FIX] O servidor recusa (provavelmente falta a quest do Lightning Bolt do Mad Scientist).
                             -- Não ficar parado: adiar o Electro 10 min e continuar o farm.
                             _G.__ElectroBlockedUntil = tick() + 600
-                            if not _G.__BoltDelivered then _G.__EQActive = true end -- inicia a quest do Lightning Bolt
+                            -- inicia (ou retoma) a quest do Lightning Bolt; se achávamos que já estava entregue mas o
+                            -- servidor continua a recusar, recomeça (no máximo 3 vezes)
+                            if _G.__BoltDelivered then
+                                _G.__EQRetries = (_G.__EQRetries or 0) + 1
+                                if _G.__EQRetries <= 3 then _G.__BoltDelivered = false; _G.__EQBolt = false end
+                            end
+                            if not _G.__BoltDelivered then _G.__EQActive = true end
                             SetTask('MainTask', 'Electro bloqueado pelo servidor (quest do Mad Scientist?) - a continuar o farm')
                             return
                         end
@@ -4760,11 +4767,34 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             return true
         end
 
+        -- opção "genérica": primeira escolha visível do lado direito que não seja Talk/Nevermind
+        local function findGenericOption()
+            local pgE = lpE:FindFirstChild("PlayerGui")
+            local vp = workspace.CurrentCamera.ViewportSize
+            local best, bestY = nil, math.huge
+            if not pgE then return nil end
+            for _, d in ipairs(pgE:GetDescendants()) do
+                if (d:IsA("TextButton") or d:IsA("TextLabel")) and shown(d) then
+                    local t = tostring(d.Text):lower():gsub("^%s+", ""):gsub("%s+$", "")
+                    local ap = d.AbsolutePosition
+                    if #t >= 3 and #t <= 40 and t ~= "talk" and not t:find("nevermind", 1, true)
+                       and ap.X > vp.X * 0.55 and ap.Y > vp.Y * 0.45 and ap.Y < vp.Y * 0.88
+                       and not t:find("^[%d%p%s]+$") then
+                        if ap.Y < bestY then best, bestY = d, ap.Y end
+                    end
+                end
+            end
+            return best
+        end
+
         -- Conversa com o Mad Scientist. Fluxo visto no jogo:
         --  [Talk | Nevermind] -> falas ... -> [I'll get you one | Nevermind]
-        -- Devolve: "paid" | "delivered" | "accepted" | nil (se não achou nada em 30 s)
+        -- Se a quest JÁ foi aceite antes, o NPC não mostra "I'll get you one": nesse caso
+        -- assume-se "já aceite" (fecha o diálogo) ou, se for para entregar, tenta a primeira opção.
+        -- Devolve: "paid" | "delivered" | "accepted" | "assumed" | "tried" | nil
         local function converse(hasBolt, npc)
-            local deadline, lastTalk, lastAdvance = tick() + 30, 0, tick()
+            local t0 = tick()
+            local deadline, lastTalk, lastAdvance = t0 + 30, 0, tick()
             while tick() < deadline do
                 if hasBolt then
                     local g = findGui("hand it over") or findGui("hand over")
@@ -4780,13 +4810,25 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 if t and tick() - lastTalk > 3 then
                     lastTalk = tick(); lastAdvance = tick()
                     clickGui(t)
-                elseif not t and tick() - lastAdvance > 3.5 then
-                    -- falas sem botão: clicar na caixa de diálogo (em baixo) para avançar
-                    lastAdvance = tick()
-                    local vp = workspace.CurrentCamera.ViewportSize
-                    VIM:SendMouseButtonEvent(vp.X / 2, vp.Y * 0.82, 0, true, game, 0)
-                    task.wait(0.06)
-                    VIM:SendMouseButtonEvent(vp.X / 2, vp.Y * 0.82, 0, false, game, 0)
+                else
+                    local never = findGui("nevermind")
+                    -- diálogo aberto mas sem opção conhecida há >10 s => já falámos antes
+                    if never and not t and tick() - t0 > 10 then
+                        if hasBolt then
+                            local g = findGenericOption()
+                            if g then clickGui(g) return "tried" end
+                        end
+                        clickGui(never)
+                        task.wait(1)
+                        return hasBolt and "tried" or "assumed"
+                    end
+                    if not t and tick() - lastAdvance > 3.5 then
+                        lastAdvance = tick()
+                        local vp = workspace.CurrentCamera.ViewportSize
+                        VIM:SendMouseButtonEvent(vp.X / 2, vp.Y * 0.82, 0, true, game, 0)
+                        task.wait(0.06)
+                        VIM:SendMouseButtonEvent(vp.X / 2, vp.Y * 0.82, 0, false, game, 0)
+                    end
                 end
                 task.wait(0.4)
             end
@@ -4865,10 +4907,19 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
 
             local pv = npc:GetPivot()
             local hasBolt = _G.__EQBolt or CheckItem("Lightning Bolt")
+            -- [FIX] se o jogador já tinha aceite a quest antes, a config permite saltar a conversa inicial
+            if Config.Melee.BoltQuestAlreadyAccepted then _G.__EQAccepted = true end
 
             -- 3) já aceitou e ainda sem bolt -> caçar a nuvem (longe do NPC)
-            if _G.__EQAccepted and not hasBolt then
+            if _G.__EQAccepted and not hasBolt and not _G.__EQCheckNow then
                 SetTask('MainTask', 'Quest Mad Scientist | À procura da nuvem com relâmpagos')
+                _G.__EQHuntSince = _G.__EQHuntSince or tick()
+                if tick() - _G.__EQHuntSince > 150 then
+                    -- [FIX] já caçou muito tempo: pode já ter o bolt (ou a quest estar noutro estado) -> verificar com o NPC
+                    _G.__EQHuntSince = nil
+                    _G.__EQCheckNow = true
+                    return
+                end
                 local cloud = findCloud()
                 if not cloud then
                     SetTask('SubTask', 'Nenhuma nuvem carregada encontrada ainda (aparecem de forma aleatória)')
@@ -4907,14 +4958,22 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             if not findGui("talk", true) and not findGui("get you one") and not findGui("hand it over") then
                 talk(npc); task.wait(1)
             end
-            local res = converse(hasBolt, npc)
+            local res = converse(hasBolt or _G.__EQCheckNow, npc)
+            _G.__EQCheckNow = false
             if res == "paid" or res == "delivered" then
                 task.wait(1.5)
                 _G.__BoltDelivered = true; _G.__EQActive = false; _G.__ElectroBlockedUntil = 0
                 SetTask('SubTask', res == "paid" and '✅ Pagamento feito - a verificar o Electro' or '✅ Bolt entregue - a comprar o Electro')
-            elseif res == "accepted" then
+            elseif res == "tried" then
+                -- tentou a 1.ª opção do diálogo; se resultou, o Electro compra-se a seguir
+                _G.__BoltDelivered = true; _G.__EQActive = false; _G.__ElectroBlockedUntil = 0
+                _G.__EQBolt = false
+                SetTask('SubTask', 'Tentei a opção de entrega - a verificar se o Electro já se pode comprar')
+                task.wait(1.5)
+            elseif res == "accepted" or res == "assumed" then
                 _G.__EQAccepted = true
-                SetTask('SubTask', 'Quest aceite - à procura da nuvem escura')
+                _G.__EQHuntSince = tick()
+                SetTask('SubTask', res == "accepted" and 'Quest aceite - à procura da nuvem escura' or 'Já tinhas falado com ele: assumo quest aceite - à procura da nuvem')
                 task.wait(1.5)
             else
                 SetTask('SubTask', 'Falei com o NPC mas não apareceu nenhum botão conhecido (Talk / I\'ll get you one / Hand it over)')
