@@ -109,7 +109,7 @@ local CoreGui = game:GetService("CoreGui")
 local lp = Players.LocalPlayer
 
 
-print("[BombaCat Hub] A iniciar... BUILD v19 (quest ja aceite)")
+print("[BombaCat Hub] A iniciar... BUILD v20 (quest bolt + habilidades)")
 timeee = os.time()
 local W_angle = 30
 local lastChange = tick()
@@ -4843,30 +4843,58 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             return false
         end
 
+        local STRONG = {"storm", "lightning", "thunder", "dark", "bolt"}
         local function findCloud()
-            if tick() - (_G.__EQScanAt or 0) < 3 then return _G.__EQCloud end
+            if tick() - (_G.__EQScanAt or 0) < 2 then return _G.__EQCloud end
             _G.__EQScanAt = tick()
-            _G.__EQCloud = nil
             local hrp = lpE.Character and lpE.Character:FindFirstChild("HumanoidRootPart")
-            if not hrp then return nil end
-            local best, bd = nil, math.huge
+            if not hrp then _G.__EQCloud = nil return nil end
+            local best, bd, bestStrong = nil, math.huge, false
             for _, d in ipairs(workspace:GetDescendants()) do
                 if d:IsA("BasePart") then
                     local n = d.Name:lower()
-                    if n:find("cloud", 1, true) or n:find("storm", 1, true) or n:find("lightning", 1, true) then
-                        local active = false
+                    local isCloud = n:find("cloud", 1, true) ~= nil
+                    local strong = false
+                    for _, k in ipairs(STRONG) do if n:find(k, 1, true) then strong = true break end end
+                    if isCloud or strong then
+                        local fx = false
                         for _, c in ipairs(d:GetDescendants()) do
-                            if (c:IsA("ParticleEmitter") and c.Enabled) or (c:IsA("Beam") and c.Enabled) then active = true break end
+                            if c:IsA("ParticleEmitter") or c:IsA("Beam") or c:IsA("PointLight") or c.Name:lower():find("lightning", 1, true) then fx = true break end
                         end
-                        if active then
+                        if strong or fx then
                             local dist = (d.Position - hrp.Position).Magnitude
-                            if dist < bd then best, bd = d, dist end
+                            -- nomes "fortes" ganham sempre às nuvens genéricas
+                            if (strong and not bestStrong) or (strong == bestStrong and dist < bd) then
+                                best, bd, bestStrong = d, dist, strong
+                            end
                         end
                     end
                 end
             end
+            if best and best ~= _G.__EQCloud then
+                print("[BombaCat Hub] Nuvem escolhida:", best:GetFullName(), "forte=", bestStrong)
+            end
             _G.__EQCloud = best
             return best
+        end
+
+        -- Ataque à nuvem: ficar DENTRO dela e usar habilidades (a wiki diz que é preciso um golpe
+        -- com física destrutiva) + cliques básicos
+        local function hitCloud()
+            pcall(function()
+                if _G.SelectWeapon then FunctionsHandler.LocalPlayerController.Methods.EquipTool:Call(_G.SelectWeapon) end
+            end)
+            local vp = workspace.CurrentCamera.ViewportSize
+            for _, key in ipairs({"Z", "X", "C", "V"}) do
+                SendKey(key, 0.12)
+                task.wait(0.25)
+            end
+            for _ = 1, 4 do
+                VIM:SendMouseButtonEvent(vp.X / 2, vp.Y / 2, 0, true, game, 0)
+                task.wait(0.05)
+                VIM:SendMouseButtonEvent(vp.X / 2, vp.Y / 2, 0, false, game, 0)
+                task.wait(0.12)
+            end
         end
 
         FunctionsHandler.ElectroQuest:RegisterMethod("Refresh", function()
@@ -4927,22 +4955,15 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 end
                 local hrp = lpE.Character and lpE.Character:FindFirstChild("HumanoidRootPart")
                 if not hrp then return end
-                local target = cloud.Position + Vector3.new(0, -4, 0)
-                if (hrp.Position - target).Magnitude > 6 then
-                    TweenController.Create(CFrame.lookAt(target, cloud.Position))
+                local target = cloud.Position -- ficar DENTRO da nuvem
+                if (hrp.Position - target).Magnitude > 8 then
+                    SetTask('SubTask', 'A voar até à nuvem: ' .. cloud.Name)
+                    TweenController.Create(CFrame.new(target))
                     return
                 end
                 SetTask('SubTask', 'A atacar a nuvem: ' .. cloud.Name)
-                pcall(function()
-                    if _G.SelectWeapon then FunctionsHandler.LocalPlayerController.Methods.EquipTool:Call(_G.SelectWeapon) end
-                end)
-                local vp = workspace.CurrentCamera.ViewportSize
-                for _ = 1, 8 do
-                    VIM:SendMouseButtonEvent(vp.X / 2, vp.Y / 2, 0, true, game, 0)
-                    task.wait(0.05)
-                    VIM:SendMouseButtonEvent(vp.X / 2, vp.Y / 2, 0, false, game, 0)
-                    task.wait(0.15)
-                end
+                TweenController.Create(CFrame.new(target)) -- seguir a nuvem enquanto ela se move
+                hitCloud()
                 return
             end
 
