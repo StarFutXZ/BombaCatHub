@@ -44,7 +44,7 @@ Config = {
     Melee = {
         AutoBuy              = true,
         CheckMasteryAfterBuy = true,
-        RaidAtV1Mastery      = 500,
+        RaidAtV1Mastery      = 400,
         ElectroAtDarkStepMastery = 400, -- [FIX] Dark Step (Black Leg) precisa deste mastery antes de comprar o Electro
         GodhumanAtV2Mastery  = 400,
     },
@@ -4653,11 +4653,11 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     -- CakePrinceTask và MeleesController để đồng bộ (train đúng cái đang
     -- thiếu, theo đúng thứ tự V1 → V2 spec yêu cầu)
     local MASTERY_TRAIN_ORDER = {
-        {name = "Black Leg",       target = 500, tier = "V1"},
-        {name = "Electro",         target = 500, tier = "V1"},
-        {name = "Fishman Karate",  target = 500, tier = "V1"},
-        {name = "Dragon Claw",     target = 500, tier = "V1"},
-        {name = "Superhuman",      target = 500, tier = "V1"},
+        {name = "Black Leg",       target = 400, tier = "V1"},
+        {name = "Electro",         target = 400, tier = "V1"},
+        {name = "Fishman Karate",  target = 400, tier = "V1"},
+        {name = "Dragon Claw",     target = 400, tier = "V1"},
+        {name = "Superhuman",      target = 400, tier = "V1"},
         {name = "Death Step",      target = 400, tier = "V2"},
         {name = "Sharkman Karate", target = 400, tier = "V2"},
         {name = "Electric Claw",   target = 400, tier = "V2"},
