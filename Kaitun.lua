@@ -108,7 +108,7 @@ local CoreGui = game:GetService("CoreGui")
 local lp = Players.LocalPlayer
 
 
-print("[BombaCat Hub] A iniciar... BUILD v17 (NPC via ReplicatedStorage)")
+print("[BombaCat Hub] A iniciar... BUILD v18 (dialogo Mad Scientist)")
 timeee = os.time()
 local W_angle = 30
 local lastChange = tick()
@@ -4722,29 +4722,75 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             return true
         end
 
-        local function clickButton(patterns)
+        local GuiService = game:GetService("GuiService")
+
+        -- procura um botão/texto VISÍVEL. exact=true -> o texto tem de ser igual (ex.: "Talk")
+        local function findGui(pattern, exact)
             local pgE = lpE:FindFirstChild("PlayerGui")
-            if not pgE then return false end
+            if not pgE then return nil end
             for _, d in ipairs(pgE:GetDescendants()) do
-                if d:IsA("TextButton") and shown(d) then
-                    local t = d.Text:lower()
-                    for _, p in ipairs(patterns) do
-                        if t:find(p, 1, true) then
-                            local ok = false
-                            if firesignal then ok = pcall(function() firesignal(d.MouseButton1Click) end) end
-                            if not ok then
-                                local ap, as = d.AbsolutePosition, d.AbsoluteSize
-                                local x, y = ap.X + as.X / 2, ap.Y + as.Y / 2 + 36
-                                VIM:SendMouseButtonEvent(x, y, 0, true, game, 0)
-                                task.wait(0.05)
-                                VIM:SendMouseButtonEvent(x, y, 0, false, game, 0)
-                            end
-                            return true
-                        end
+                if (d:IsA("TextButton") or d:IsA("TextLabel")) and shown(d) then
+                    local t = tostring(d.Text):lower():gsub("^%s+", ""):gsub("%s+$", "")
+                    if (exact and t == pattern) or (not exact and t:find(pattern, 1, true)) then
+                        return d
                     end
                 end
             end
-            return false
+            return nil
+        end
+
+        local function clickGui(target)
+            -- sobe até um botão real, se existir (as opções do diálogo podem ser TextLabel dentro de um botão)
+            local btn, p = nil, target
+            while p and not p:IsA("LayerCollector") do
+                if p:IsA("GuiButton") then btn = p break end
+                p = p.Parent
+            end
+            if btn and firesignal then
+                pcall(function() firesignal(btn.MouseButton1Click) end)
+                pcall(function() firesignal(btn.Activated) end)
+            end
+            -- clique real no centro (o jogo pode ouvir InputBegan em vez de Click)
+            local ap, as = target.AbsolutePosition, target.AbsoluteSize
+            local inset = GuiService:GetGuiInset()
+            local x, y = ap.X + as.X / 2, ap.Y + as.Y / 2 + inset.Y
+            VIM:SendMouseButtonEvent(x, y, 0, true, game, 0)
+            task.wait(0.06)
+            VIM:SendMouseButtonEvent(x, y, 0, false, game, 0)
+            return true
+        end
+
+        -- Conversa com o Mad Scientist. Fluxo visto no jogo:
+        --  [Talk | Nevermind] -> falas ... -> [I'll get you one | Nevermind]
+        -- Devolve: "paid" | "delivered" | "accepted" | nil (se não achou nada em 30 s)
+        local function converse(hasBolt, npc)
+            local deadline, lastTalk, lastAdvance = tick() + 30, 0, tick()
+            while tick() < deadline do
+                if hasBolt then
+                    local g = findGui("hand it over") or findGui("hand over")
+                    if g then clickGui(g) return "delivered" end
+                end
+                local pay = findGui("pay")
+                if pay then clickGui(pay) return "paid" end
+                if not hasBolt then
+                    local g = findGui("get you one")
+                    if g then clickGui(g) return "accepted" end
+                end
+                local t = findGui("talk", true)
+                if t and tick() - lastTalk > 3 then
+                    lastTalk = tick(); lastAdvance = tick()
+                    clickGui(t)
+                elseif not t and tick() - lastAdvance > 3.5 then
+                    -- falas sem botão: clicar na caixa de diálogo (em baixo) para avançar
+                    lastAdvance = tick()
+                    local vp = workspace.CurrentCamera.ViewportSize
+                    VIM:SendMouseButtonEvent(vp.X / 2, vp.Y * 0.82, 0, true, game, 0)
+                    task.wait(0.06)
+                    VIM:SendMouseButtonEvent(vp.X / 2, vp.Y * 0.82, 0, false, game, 0)
+                end
+                task.wait(0.4)
+            end
+            return nil
         end
 
         local function talk(npc)
@@ -4857,21 +4903,21 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 return
             end
             SetTask('MainTask', 'Quest Mad Scientist | A falar com o Mad Scientist')
-            talk(npc); task.wait(1)
-            if clickButton({"pay"}) then
+            -- se o diálogo ainda não está aberto, abrir (prompt "Talk" do NPC)
+            if not findGui("talk", true) and not findGui("get you one") and not findGui("hand it over") then
+                talk(npc); task.wait(1)
+            end
+            local res = converse(hasBolt, npc)
+            if res == "paid" or res == "delivered" then
                 task.wait(1.5)
                 _G.__BoltDelivered = true; _G.__EQActive = false; _G.__ElectroBlockedUntil = 0
-                SetTask('SubTask', '✅ Botão de pagar clicado - a verificar o Electro')
-            elseif hasBolt and clickButton({"hand it over"}) then
-                task.wait(1.5)
-                _G.__BoltDelivered = true; _G.__EQActive = false; _G.__ElectroBlockedUntil = 0
-                SetTask('SubTask', '✅ Bolt entregue - a comprar o Electro')
-            elseif not _G.__EQAccepted and clickButton({"get you one"}) then
+                SetTask('SubTask', res == "paid" and '✅ Pagamento feito - a verificar o Electro' or '✅ Bolt entregue - a comprar o Electro')
+            elseif res == "accepted" then
                 _G.__EQAccepted = true
-                SetTask('SubTask', 'Quest aceite - à procura da nuvem')
+                SetTask('SubTask', 'Quest aceite - à procura da nuvem escura')
                 task.wait(1.5)
             else
-                SetTask('SubTask', 'Falei com o NPC mas não vi botão conhecido (pay / hand it over / get you one)')
+                SetTask('SubTask', 'Falei com o NPC mas não apareceu nenhum botão conhecido (Talk / I\'ll get you one / Hand it over)')
             end
         end)
     end
