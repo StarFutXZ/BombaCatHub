@@ -47,7 +47,7 @@ Config = {
         GodhumanAtV2Mastery  = 400,
     },
     AutoKen = true,
-    BringMobs = false,  -- desligado (BringEnemy sai logo; CombatController.GRAB também está false)
+    BringMobs = true,
     -- Bring mobs from across nearby islands, but only names in the active farm target list.
     BringRadius = 800,
     BringMaxMobs = 30,
@@ -90,7 +90,7 @@ _G.SelectWeapon = nil
 task.spawn(function()
     while task.wait(0.5) do
         pcall(function()
-            local bp = LocalPlayer:FindFirstChild("Backpack")
+            local bp = lp:FindFirstChild("Backpack")
             if not bp then return end
             if _G.ChooseWP == "Melee" then
                 for _, v in pairs(bp:GetChildren()) do
@@ -3856,6 +3856,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     -- ============================================================
     FunctionsHandler.LocalPlayerController:RegisterMethod("EquipTool", function(h)
         if not Humanoid then return end
+        if _G.HoldKey and tostring(h) ~= "Key" then return end
         local bp = LocalPlayer:FindFirstChild("Backpack")
         if not bp then return end
         for X, X in bp:GetChildren() do
@@ -6370,37 +6371,60 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     -- AUTO SEA 2 & 3 (CÁC THREAD RIÊNG)
     -- ============================================================
     task.spawn(function()
-        while task.wait(0.5) do
-            if Config.AutoSea2 then
-                pcall(function()
-                    if ScriptStorage.PlayerData.Level >= 700 and SeaIndex ~= 2 then
-                        _G.SeaTransitionActive = true  -- [ADDED] đồng bộ với AutoSea3, tránh LevelFarm giành tween
-                        local iceDoor = workspace.Map.Ice.Door
-                        if iceDoor and iceDoor.CanCollide == true and iceDoor.Transparency == 0 then
-                            Remotes.CommF_:InvokeServer("DressrosaQuestProgress", "Detective")
-                            FunctionsHandler.LocalPlayerController.Methods.EquipTool:Call("Key")
-                            TweenController.Create(CFrame.new(1347.71, 37.38, -1325.65))
-                            repeat task.wait() until not Config.AutoSea2 or (HumanoidRootPart and (HumanoidRootPart.Position - Vector3.new(1347.71, 37.38, -1325.65)).Magnitude < 5)
-                        elseif iceDoor and iceDoor.CanCollide == false and iceDoor.Transparency == 1 then
-                            if workspace.Enemies:FindFirstChild("Ice Admiral") then
-                                CombatController.Attack("Ice Admiral")
-                                repeat task.wait() until not Config.AutoSea2 or not workspace.Enemies:FindFirstChild("Ice Admiral") or workspace.Enemies["Ice Admiral"].Humanoid.Health <= 0
-                                Remotes.CommF_:InvokeServer("TravelDressrosa")
-                            else
-                                TweenController.Create(CFrame.new(1347.71, 37.38, -1325.65))
-                            end
-                        else
-                            Remotes.CommF_:InvokeServer("TravelDressrosa")
+        -- [FIX Sea2] Reescrito: antes ficava 60s parado a segurar a Chave sem chamar UseKey
+        -- e brigava com o LevelFarm (que re-equipava o Melee). Agora segue o fluxo
+        -- Detective -> UseKey -> Ice Admiral -> TravelDressrosa, sem bloqueios longos.
+        local DOOR_CF = CFrame.new(1347.71, 37.38, -1325.65)
+        while task.wait(1) do
+            if Config.AutoSea2 and (ScriptStorage.PlayerData.Level or 0) >= 700 and SeaIndex == 1 then
+                local ok, err = pcall(function()
+                    _G.SeaTransitionActive = true
+                    local prog = Remotes.CommF_:InvokeServer("DressrosaQuestProgress")
+                    if type(prog) ~= "table" then return end
+
+                    if prog.KilledIceBoss then
+                        SetTask("MainTask", "Auto Second Sea - Travel")
+                        Remotes.CommF_:InvokeServer("TravelDressrosa")
+                        task.wait(5)
+                        return
+                    end
+
+                    if not prog.TalkedDetective then
+                        SetTask("MainTask", "Auto Second Sea - Talk To Detective")
+                        Remotes.CommF_:InvokeServer("DressrosaQuestProgress", "Detective")
+                        task.wait(1)
+                        return
+                    end
+
+                    local iceDoor = workspace.Map.Ice.Door
+                    if iceDoor and iceDoor.CanCollide == true and iceDoor.Transparency == 0 then
+                        -- porta fechada: segurar a Chave, ir até à porta e usar a chave
+                        SetTask("MainTask", "Auto Second Sea - Opening Ice Door")
+                        _G.HoldKey = true
+                        FunctionsHandler.LocalPlayerController.Methods.EquipTool:Call("Key")
+                        TweenController.Create(DOOR_CF)
+                        if HumanoidRootPart and (HumanoidRootPart.Position - DOOR_CF.Position).Magnitude < 8 then
+                            Remotes.CommF_:InvokeServer("DressrosaQuestProgress", "UseKey")
+                            task.wait(1.5)
                         end
-                        -- [ADDED] Check PlaceId thật để xác nhận đã sang Sea 2, timeout 60s tránh treo vĩnh viễn
-                        local waitStart = tick()
-                        repeat
-                            task.wait(1)
-                        until game.PlaceId == 4442272183 or game.PlaceId == 79091703265657
-                           or SeaIndex == 2 or (tick() - waitStart) > 60
-                        _G.SeaTransitionActive = false
+                    else
+                        -- porta aberta: matar o Ice Admiral
+                        _G.HoldKey = false
+                        SetTask("MainTask", "Auto Second Sea - Defeating Ice Admiral")
+                        local boss = workspace.Enemies:FindFirstChild("Ice Admiral")
+                        if boss and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
+                            CombatController.Attack("Ice Admiral")
+                        else
+                            TweenController.Create(DOOR_CF)
+                        end
                     end
                 end)
+                if not ok then warn("[BombaCat Hub] AutoSea2:", err) end
+            else
+                _G.HoldKey = false
+                if not (Config.AutoSea3 and (ScriptStorage.PlayerData.Level or 0) >= 1500 and SeaIndex ~= 3) then
+                    _G.SeaTransitionActive = false
+                end
             end
         end
     end)
