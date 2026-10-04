@@ -48,10 +48,10 @@ Config = {
         GodhumanAtV2Mastery  = 400,
     },
     AutoKen = true,
-    BringMobs = false,
+    BringMobs = true,
     -- Bring mobs from across nearby islands, but only names in the active farm target list.
     BringRadius = 800,
-    BringMaxMobs = 30,
+    BringMaxMobs = 2,
     PanicMode = {
         Enabled          = true,
         LowHealthPercent = 20,
@@ -106,122 +106,6 @@ local CoreGui = game:GetService("CoreGui")
 
 local lp = Players.LocalPlayer
 
--- ============================================================
--- [ADDED] PAINEL NO TOPO: ligar/desligar itens em tempo real
--- Toca em "BombaCat Hub" no topo do ecrã para abrir/fechar.
--- Os botões mexem diretamente na tabela Config (lida em loop pelo script).
--- ============================================================
-task.spawn(function()
-    task.wait(6) -- esperar o resto do script criar Config.Extras
-    local ok, err = pcall(function()
-        local parent = (gethui and gethui()) or CoreGui
-        local old = parent:FindFirstChild("BombaCatItemsUI")
-        if old then old:Destroy() end
-
-        local gui = Instance.new("ScreenGui")
-        gui.Name = "BombaCatItemsUI"
-        gui.ResetOnSpawn = false
-        gui.IgnoreGuiInset = true
-        gui.DisplayOrder = 999
-        local okParent = pcall(function() gui.Parent = parent end)
-        if not okParent then gui.Parent = lp:WaitForChild("PlayerGui") end
-
-        local header = Instance.new("TextButton")
-        header.Size = UDim2.new(0, 240, 0, 32)
-        header.AnchorPoint = Vector2.new(0.5, 0)
-        header.Position = UDim2.new(0.5, 0, 0, 4)
-        header.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-        header.TextColor3 = Color3.fromRGB(255, 200, 0)
-        header.Font = Enum.Font.GothamBold
-        header.TextSize = 15
-        header.Text = "BombaCat Hub  ▼"
-        header.Parent = gui
-        Instance.new("UICorner", header).CornerRadius = UDim.new(0, 8)
-
-        local panel = Instance.new("ScrollingFrame")
-        panel.Size = UDim2.new(0, 240, 0, 260)
-        panel.AnchorPoint = Vector2.new(0.5, 0)
-        panel.Position = UDim2.new(0.5, 0, 0, 40)
-        panel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-        panel.BackgroundTransparency = 0.1
-        panel.BorderSizePixel = 0
-        panel.ScrollBarThickness = 4
-        panel.AutomaticCanvasSize = Enum.AutomaticSize.Y
-        panel.CanvasSize = UDim2.new(0, 0, 0, 0)
-        panel.Visible = false
-        panel.Parent = gui
-        Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 8)
-
-        local layout = Instance.new("UIListLayout", panel)
-        layout.Padding = UDim.new(0, 4)
-        layout.SortOrder = Enum.SortOrder.LayoutOrder
-        local pad = Instance.new("UIPadding", panel)
-        pad.PaddingTop = UDim.new(0, 4); pad.PaddingBottom = UDim.new(0, 4)
-        pad.PaddingLeft = UDim.new(0, 4); pad.PaddingRight = UDim.new(0, 4)
-
-        header.MouseButton1Click:Connect(function()
-            panel.Visible = not panel.Visible
-            header.Text = panel.Visible and "BombaCat Hub  ▲" or "BombaCat Hub  ▼"
-        end)
-
-        local order = 0
-        local function nextOrder() order = order + 1; return order end
-
-        local function addTitle(text)
-            local t = Instance.new("TextLabel")
-            t.Size = UDim2.new(1, 0, 0, 22)
-            t.BackgroundTransparency = 1
-            t.Font = Enum.Font.GothamBold
-            t.TextSize = 13
-            t.TextColor3 = Color3.fromRGB(255, 200, 0)
-            t.TextXAlignment = Enum.TextXAlignment.Left
-            t.Text = text
-            t.LayoutOrder = nextOrder()
-            t.Parent = panel
-        end
-
-        local function addToggle(tbl, key)
-            local b = Instance.new("TextButton")
-            b.Size = UDim2.new(1, 0, 0, 30)
-            b.Font = Enum.Font.Gotham
-            b.TextSize = 13
-            b.TextColor3 = Color3.new(1, 1, 1)
-            b.LayoutOrder = nextOrder()
-            b.Parent = panel
-            Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
-            local function refresh()
-                local on = tbl[key] == true
-                b.Text = tostring(key) .. "   [" .. (on and "ON" or "OFF") .. "]"
-                b.BackgroundColor3 = on and Color3.fromRGB(35, 120, 55) or Color3.fromRGB(130, 40, 40)
-            end
-            b.MouseButton1Click:Connect(function()
-                tbl[key] = not (tbl[key] == true)
-                refresh()
-            end)
-            refresh()
-        end
-
-        local function addSection(title, tbl)
-            if type(tbl) ~= "table" then return end
-            local keys = {}
-            for k, v in pairs(tbl) do
-                if type(v) == "boolean" then table.insert(keys, k) end
-            end
-            if #keys == 0 then return end
-            table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
-            addTitle(title)
-            for _, k in ipairs(keys) do addToggle(tbl, k) end
-        end
-
-        addSection("ITENS", Config.Items)
-        addSection("ESPADAS", Config.Sword)
-        addSection("ARMAS DE BOSS", Config.BossWeapons)
-        addSection("EXTRAS", Config.Extras)
-        addSection("GERAL", Config)
-        addSection("MELEE", Config.Melee)
-    end)
-    if not ok then warn("[BombaCat Hub] Painel falhou:", err) end
-end)
 
 print("[BombaCat Hub] A iniciar...")
 timeee = os.time()
@@ -1505,8 +1389,9 @@ end
         "SpecialBossesTask", "SwordBossTask", "BossesTask",
         "RaidController", "AutoRaidIce",
         "CakePrinceTask", "MeleesController",
+        "Saber", -- [FIX] antes estava depois do LevelFarm e nunca chegava a correr (first-match-wins)
         "LevelFarm", "Tushita", 'Yama',
-        "Saber", "CursedDualKatana", "SoulGuitar", "EvoRace", "RaceAwakening",
+        "CursedDualKatana", "SoulGuitar", "EvoRace", "RaceAwakening",
         -- [FIXED - xung đột code phát hiện khi rà toàn bộ] Bỏ "Wenlocktoad"
         -- và "ExpRedeem" khỏi danh sách này — cả 2 CÓ gọi :Register() (tạo
         -- task slot rỗng) nhưng KHÔNG hề có RegisterMethod("Refresh"/"Start")
@@ -2421,7 +2306,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         end
 
         local radius  = Config.BringRadius or 800
-        local maxPull = Config.BringMaxMobs or 30
+        local maxPull = Config.BringMaxMobs or 2
         local target  = aRoot.CFrame
         local aPos    = aRoot.Position
         local pulled  = 0
@@ -4030,9 +3915,11 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     -- ============================================================
     FunctionsHandler.Saber:RegisterMethod('Refresh', function()
         if not Config.Items.Saber then return end
+        if SeaIndex ~= 1 then return end -- [FIX] a quest do Saber só existe no Sea 1
         if ScriptStorage.Backpack.Saber then return end
         if ScriptStorage.PlayerData.Level < 200 then return end
         local X = Remotes.CommF_:InvokeServer('ProQuestProgress')
+        if type(X) ~= "table" or type(X.Plates) ~= "table" then return end
         local h
         for w, w in X.Plates do if w == false then h = 1 end end
         if not h then
@@ -6524,7 +6411,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         -- Detective -> UseKey -> Ice Admiral -> TravelDressrosa, sem bloqueios longos.
         local DOOR_CF = CFrame.new(1347.71, 37.38, -1325.65)
         while task.wait(1) do
-            if Config.AutoSea2 and (ScriptStorage.PlayerData.Level or 0) >= 700 and SeaIndex == 1 then
+            local needSaber = Config.Items.Saber and not ScriptStorage.Backpack.Saber and not (CheckItem and CheckItem("Saber"))
+            if Config.AutoSea2 and not needSaber and (ScriptStorage.PlayerData.Level or 0) >= 700 and SeaIndex == 1 then
                 local ok, err = pcall(function()
                     _G.SeaTransitionActive = true
                     local prog = Remotes.CommF_:InvokeServer("DressrosaQuestProgress")
