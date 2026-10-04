@@ -1397,7 +1397,7 @@ end
     TasksOrder = {
         "SpecialBossesTask", "SwordBossTask", "BossesTask",
         "RaidController", "AutoRaidIce",
-        "CakePrinceTask", "MeleesController",
+        "CakePrinceTask", "ElectroQuest", "MeleesController",
         "Saber", -- [FIX] antes estava depois do LevelFarm e nunca chegava a correr (first-match-wins)
         "LevelFarm", "Tushita", 'Yama',
         "CursedDualKatana", "SoulGuitar", "EvoRace", "RaceAwakening",
@@ -2722,6 +2722,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     FunctionsHandler.ExpRedeem:Register()
     FunctionsHandler.LevelFarm:Register()
     FunctionsHandler.Saber:Register()
+    FunctionsHandler.ElectroQuest:Register()
     FunctionsHandler.Rengoku:Register()
     FunctionsHandler.Yama:Register()
     FunctionsHandler.Tushita:Register()
@@ -2818,6 +2819,9 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 if name == "Electro" and (ScriptStorage.Melees["Black Leg"] or 0) < (Config.Melee.ElectroAtDarkStepMastery or 400) then
                     return nil -- [FIX] primeiro treinar o Dark Step até ao mastery alvo
                 end
+                if name == "Electro" and tick() < (_G.__ElectroBlockedUntil or 0) then
+                    return nil -- [FIX] Electro adiado: deixa o farm correr
+                end
                 local data = MeleePrices[name]
                 local price = data and data.Price or {}
                 local beli = ScriptStorage.PlayerData.Beli or 0
@@ -2898,7 +2902,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 [3] = CFrame.new(-5023.91, 371.02, -3191.46),
             },
             ["Mad Scientist"] = {
-                [1] = CFrame.new(-5382.79, 12.55, -2148.82),
+                -- [FIX] Sea 1 removido: a coordenada antiga ficava no meio do oceano.
+                -- O NPC do Sea 1 fica por baixo das Skylands (usa a posição real se carregado).
                 [2] = CFrame.new(-4866.16, 33.92, -4767.11),
                 [3] = CFrame.new(-4996.06, 313.21, -3201.83),
             },
@@ -2949,16 +2954,6 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             local locs = TeacherLocations[teacher]
             if not locs then return true end
 
-            -- [FIX] Electro: se estiver no Sea 2/3, volta ao Sea 1 para o comprar
-            if meleeName == "Electro" and SeaIndex ~= 1 then
-                SetTask('MainTask', 'Auto Full Melee | A voltar ao Sea 1 para comprar o Electro')
-                if tick() - (_G.__LastTravelMain or 0) > 15 then
-                    _G.__LastTravelMain = tick()
-                    Remotes.CommF_:InvokeServer("TravelMain")
-                end
-                return false
-            end
-
             local cf = locs[SeaIndex]
             -- [FIX] Usar a posição REAL do NPC (se carregado) em vez de só a coordenada fixa
             pcall(function()
@@ -2967,7 +2962,11 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             end)
             if not cf then
                 if SeaIndex ~= 3 then
-                    Remotes.CommF_:InvokeServer("TravelZou")
+                    if tick() - (_G.__LastTravelTeacher or 0) > 15 then
+                        _G.__LastTravelTeacher = tick()
+                        local dest = (meleeName == "Electro" and SeaIndex == 1) and "TravelDressrosa" or "TravelZou"
+                        Remotes.CommF_:InvokeServer(dest)
+                    end
                     return false
                 end
                 return true -- đang ở Sea 3 mà bảng thiếu toạ độ Sea 3 (không nên xảy ra)
@@ -2984,6 +2983,9 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             if _G.Stop then return end
 
             local bp = CheckItem(melee.name)
+            if not bp and melee.name == "Electro" and tick() < (_G.__ElectroBlockedUntil or 0) then
+                return
+            end
             if not bp and melee.name == "Electro"
                and (ScriptStorage.Melees["Black Leg"] or 0) < (Config.Melee.ElectroAtDarkStepMastery or 400) then
                 -- [FIX] Electro só depois do Dark Step chegar ao mastery alvo
@@ -3145,6 +3147,14 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                         SetTask('SubTask', 'Electro | check=' .. tostring(chk) .. ' compra=' .. tostring(res))
                         print("[BombaCat Hub] Electro check=", chk, " compra=", res)
                         task.wait(1)
+                        if not CheckItem("Electro") and chk == 0 and res == 0 then
+                            -- [FIX] O servidor recusa (provavelmente falta a quest do Lightning Bolt do Mad Scientist).
+                            -- Não ficar parado: adiar o Electro 10 min e continuar o farm.
+                            _G.__ElectroBlockedUntil = tick() + 600
+                            if not _G.__BoltDelivered then _G.__EQActive = true end -- inicia a quest do Lightning Bolt
+                            SetTask('MainTask', 'Electro bloqueado pelo servidor (quest do Mad Scientist?) - a continuar o farm')
+                            return
+                        end
                     else
                         local checkResult = BuyMelee(melee.key, true)  -- Bước 1: check (proxy ghi vào J nếu hợp lệ)
                         task.wait(0.3)
@@ -4674,6 +4684,195 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             end
         end
         return nil
+    end
+
+
+    -- ============================================================
+    -- [ADDED - EXPERIMENTAL] Quest do Lightning Bolt do Mad Scientist (Update 30)
+    -- Baseada SÓ no que está documentado em guias (texto dos botões do diálogo,
+    -- nuvem cinzenta com relâmpagos nas Skylands). Os nomes internos do jogo
+    -- NÃO são públicos, por isso isto descobre tudo em tempo de execução
+    -- (procura botões pelo texto e nuvens por nome/efeitos). Se falhar, o
+    -- SubTask diz em que passo ficou.
+    -- ============================================================
+    do
+        local lpE = game.Players.LocalPlayer
+        local VIM = game:GetService("VirtualInputManager")
+
+        -- apanha a mensagem "Caught a Lightning Bolt" (o item pode não aparecer na mochila)
+        task.spawn(function()
+            local pgE = lpE:WaitForChild("PlayerGui")
+            local function chk(d)
+                if d:IsA("TextLabel") then
+                    local t = tostring(d.Text):lower()
+                    if t:find("caught a lightning bolt", 1, true) then _G.__EQBolt = true end
+                end
+            end
+            for _, d in ipairs(pgE:GetDescendants()) do pcall(chk, d) end
+            pgE.DescendantAdded:Connect(function(d) task.wait(0.1); pcall(chk, d) end)
+        end)
+
+        local function shown(g)
+            local p = g
+            while p and p ~= game do
+                if p:IsA("GuiObject") and not p.Visible then return false end
+                if p:IsA("ScreenGui") and not p.Enabled then return false end
+                p = p.Parent
+            end
+            return true
+        end
+
+        local function clickButton(patterns)
+            local pgE = lpE:FindFirstChild("PlayerGui")
+            if not pgE then return false end
+            for _, d in ipairs(pgE:GetDescendants()) do
+                if d:IsA("TextButton") and shown(d) then
+                    local t = d.Text:lower()
+                    for _, p in ipairs(patterns) do
+                        if t:find(p, 1, true) then
+                            local ok = false
+                            if firesignal then ok = pcall(function() firesignal(d.MouseButton1Click) end) end
+                            if not ok then
+                                local ap, as = d.AbsolutePosition, d.AbsoluteSize
+                                local x, y = ap.X + as.X / 2, ap.Y + as.Y / 2 + 36
+                                VIM:SendMouseButtonEvent(x, y, 0, true, game, 0)
+                                task.wait(0.05)
+                                VIM:SendMouseButtonEvent(x, y, 0, false, game, 0)
+                            end
+                            return true
+                        end
+                    end
+                end
+            end
+            return false
+        end
+
+        local function talk(npc)
+            for _, d in ipairs(npc:GetDescendants()) do
+                if d:IsA("ProximityPrompt") and fireproximityprompt then pcall(fireproximityprompt, d) return true end
+                if d:IsA("ClickDetector") and fireclickdetector then pcall(fireclickdetector, d) return true end
+            end
+            return false
+        end
+
+        local function findCloud()
+            if tick() - (_G.__EQScanAt or 0) < 3 then return _G.__EQCloud end
+            _G.__EQScanAt = tick()
+            _G.__EQCloud = nil
+            local hrp = lpE.Character and lpE.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then return nil end
+            local best, bd = nil, math.huge
+            for _, d in ipairs(workspace:GetDescendants()) do
+                if d:IsA("BasePart") then
+                    local n = d.Name:lower()
+                    if n:find("cloud", 1, true) or n:find("storm", 1, true) or n:find("lightning", 1, true) then
+                        local active = false
+                        for _, c in ipairs(d:GetDescendants()) do
+                            if (c:IsA("ParticleEmitter") and c.Enabled) or (c:IsA("Beam") and c.Enabled) then active = true break end
+                        end
+                        if active then
+                            local dist = (d.Position - hrp.Position).Magnitude
+                            if dist < bd then best, bd = d, dist end
+                        end
+                    end
+                end
+            end
+            _G.__EQCloud = best
+            return best
+        end
+
+        FunctionsHandler.ElectroQuest:RegisterMethod("Refresh", function()
+            if not _G.__EQActive then return nil end
+            if not (Config.Items.AutoFullyMelees and Config.Melee.AutoBuy) then return nil end
+            if CheckItem("Electro") then _G.__EQActive = false return nil end
+            return true
+        end)
+
+        FunctionsHandler.ElectroQuest:RegisterMethod("Start", function()
+            -- a quest só existe no Sea 1 (Skylands)
+            if SeaIndex ~= 1 then
+                SetTask('MainTask', 'Quest Mad Scientist | A voltar ao Sea 1')
+                if tick() - (_G.__LastTravelMain or 0) > 15 then
+                    _G.__LastTravelMain = tick()
+                    Remotes.CommF_:InvokeServer("TravelMain")
+                end
+                return
+            end
+
+            local npcs = workspace:FindFirstChild("NPCs")
+            local npc = npcs and npcs:FindFirstChild("Mad Scientist")
+            local hasBolt = _G.__EQBolt or CheckItem("Lightning Bolt")
+
+            -- 1) ENTREGAR (tem o bolt)
+            if hasBolt then
+                if not npc then SetTask('SubTask', 'Mad Scientist não carregado - aproxima-te das Skylands inferiores') return end
+                local pv = npc:GetPivot()
+                if CaculateDistance(pv) > 8 then
+                    SetTask('MainTask', 'Quest Mad Scientist | A ir entregar o Lightning Bolt')
+                    TweenController.Create(pv * CFrame.new(0, 0, 4))
+                    return
+                end
+                SetTask('MainTask', 'Quest Mad Scientist | A entregar o Lightning Bolt')
+                talk(npc); task.wait(1)
+                if clickButton({"hand it over"}) then
+                    task.wait(1.5)
+                    _G.__BoltDelivered = true
+                    _G.__EQActive = false
+                    _G.__ElectroBlockedUntil = 0
+                    SetTask('SubTask', '✅ Bolt entregue - a tentar comprar o Electro')
+                else
+                    SetTask('SubTask', 'Não encontrei o botão "Hand it over" (diz-me o que aparece no ecrã)')
+                end
+                return
+            end
+
+            -- 2) ACEITAR A QUEST
+            if not _G.__EQAccepted then
+                if not npc then SetTask('SubTask', 'Mad Scientist não carregado - aproxima-te das Skylands inferiores') return end
+                local pv = npc:GetPivot()
+                if CaculateDistance(pv) > 8 then
+                    SetTask('MainTask', 'Quest Mad Scientist | A ir ao Mad Scientist')
+                    TweenController.Create(pv * CFrame.new(0, 0, 4))
+                    return
+                end
+                SetTask('MainTask', 'Quest Mad Scientist | A aceitar a quest')
+                talk(npc); task.wait(1)
+                if clickButton({"get you one"}) then
+                    _G.__EQAccepted = true
+                    SetTask('SubTask', 'Quest aceite - à procura da nuvem')
+                    task.wait(1.5)
+                else
+                    SetTask('SubTask', 'Não encontrei o botão "I\'ll get you one" (diz-me o que aparece no ecrã)')
+                end
+                return
+            end
+
+            -- 3) CAÇAR A NUVEM COM RELÂMPAGOS E PARTI-LA
+            SetTask('MainTask', 'Quest Mad Scientist | À procura da nuvem com relâmpagos')
+            local cloud = findCloud()
+            if not cloud then
+                SetTask('SubTask', 'Nenhuma nuvem carregada encontrada ainda (aparecem de forma aleatória)')
+                return
+            end
+            local hrp = lpE.Character and lpE.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+            local target = cloud.Position + Vector3.new(0, -4, 0)
+            if (hrp.Position - target).Magnitude > 6 then
+                TweenController.Create(CFrame.lookAt(target, cloud.Position))
+                return
+            end
+            SetTask('SubTask', 'A atacar a nuvem: ' .. cloud.Name)
+            pcall(function()
+                if _G.SelectWeapon then FunctionsHandler.LocalPlayerController.Methods.EquipTool:Call(_G.SelectWeapon) end
+            end)
+            local vp = workspace.CurrentCamera.ViewportSize
+            for _ = 1, 8 do
+                VIM:SendMouseButtonEvent(vp.X / 2, vp.Y / 2, 0, true, game, 0)
+                task.wait(0.05)
+                VIM:SendMouseButtonEvent(vp.X / 2, vp.Y / 2, 0, false, game, 0)
+                task.wait(0.15)
+            end
+        end)
     end
 
     FunctionsHandler.CakePrinceTask:RegisterMethod("Refresh", function()
@@ -6479,10 +6678,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         while task.wait(1) do
             local needSaber = Config.Items.Saber and not ScriptStorage.Backpack.Saber and not (CheckItem and CheckItem("Saber"))
             -- [FIX] Dark Step no mastery alvo + 500k Beli e sem Electro: ficar/voltar ao Sea 1 até o comprar
-            local needElectro = Config.Items.AutoFullyMelees and Config.Melee.AutoBuy
-                and not (CheckItem and CheckItem("Electro"))
-                and (ScriptStorage.PlayerData.Beli or 0) >= 500000
-                and (ScriptStorage.Melees["Black Leg"] or 0) >= (Config.Melee.ElectroAtDarkStepMastery or 400)
+            local needElectro = false -- [FIX] o Mad Scientist também existe no Sea 2 e 3
             if Config.AutoSea2 and not needSaber and not needElectro and (ScriptStorage.PlayerData.Level or 0) >= 700 and SeaIndex == 1 then
                 local ok, err = pcall(function()
                     _G.SeaTransitionActive = true
