@@ -45,6 +45,7 @@ Config = {
         AutoBuy              = true,
         CheckMasteryAfterBuy = true,
         RaidAtV1Mastery      = 500,
+        ElectroAtDarkStepMastery = 400, -- [FIX] Dark Step (Black Leg) precisa deste mastery antes de comprar o Electro
         GodhumanAtV2Mastery  = 400,
     },
     AutoKen = true,
@@ -53,7 +54,7 @@ Config = {
     BringRadius = 800,
     BringMaxMobs = 2,
     PanicMode = {
-        Enabled          = true,
+        Enabled          = false,
         LowHealthPercent = 20,
         SafeHealthPercent = 75,
         EscapeHeight     = 2000,
@@ -131,6 +132,14 @@ task.spawn(function()
                         break
                     end
                 end
+                -- [FIX] Treinar o Dark Step (Black Leg) até ao mastery alvo antes de comprar o Electro
+                pcall(function()
+                    local hasBL = bp:FindFirstChild("Black Leg") or (lp.Character and lp.Character:FindFirstChild("Black Leg"))
+                    if hasBL and Config.Items.AutoFullyMelees and not CheckItem("Electro")
+                       and (ScriptStorage.Melees["Black Leg"] or 0) < (Config.Melee.ElectroAtDarkStepMastery or 400) then
+                        _G.SelectWeapon = "Black Leg"
+                    end
+                end)
             elseif _G.ChooseWP == "Sword" then
                 for _, v in pairs(bp:GetChildren()) do
                     if v:IsA("Tool") and v.ToolTip == "Sword" then
@@ -2780,7 +2789,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         local beliNow = ScriptStorage.PlayerData.Beli or 0
         local needsDarkStep = not CheckItem("Black Leg")
         local canBuyDarkStepSea1 = SeaIndex == 1 and needsDarkStep and beliNow >= 150000
-        local canBuyElectro = not CheckItem("Electro") and beliNow >= 500000 -- [FIX] Electro assim que houver 500k Beli
+        local canBuyElectro = not CheckItem("Electro") and beliNow >= 500000 and (ScriptStorage.Melees["Black Leg"] or 0) >= (Config.Melee.ElectroAtDarkStepMastery or 400) -- [FIX] Electro: 500k Beli + Dark Step no mastery alvo
         if (ScriptStorage.PlayerData.Level or 0) < 300 and not canBuyDarkStepSea1 and not canBuyElectro then return nil end
         -- [FIXED] Bỏ "if _G.Level then return nil end" — đây là khóa VĨNH VIỄN,
         -- một khi thiếu tiền 1 lần là MeleesController tắt luôn mãi mãi vì
@@ -2806,6 +2815,9 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         -- LevelFarm para continuar a ganhar XP, Beli e mastery em vez de parar.
         for _, name in ipairs(allMelees) do
             if not CheckItem(name) then
+                if name == "Electro" and (ScriptStorage.Melees["Black Leg"] or 0) < (Config.Melee.ElectroAtDarkStepMastery or 400) then
+                    return nil -- [FIX] primeiro treinar o Dark Step até ao mastery alvo
+                end
                 local data = MeleePrices[name]
                 local price = data and data.Price or {}
                 local beli = ScriptStorage.PlayerData.Beli or 0
@@ -2826,7 +2838,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         local canBuyDarkStepSea1 = SeaIndex == 1
             and not CheckItem("Black Leg")
             and (ScriptStorage.PlayerData.Beli or 0) >= 150000
-        local canBuyElectro = not CheckItem("Electro") and (ScriptStorage.PlayerData.Beli or 0) >= 500000
+        local canBuyElectro = not CheckItem("Electro") and (ScriptStorage.PlayerData.Beli or 0) >= 500000 and (ScriptStorage.Melees["Black Leg"] or 0) >= (Config.Melee.ElectroAtDarkStepMastery or 400)
         if ScriptStorage.PlayerData.Level < 200 and not canBuyDarkStepSea1 and not canBuyElectro then return end
 
         local meleeList = {
@@ -2967,6 +2979,11 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             if _G.Stop then return end
 
             local bp = CheckItem(melee.name)
+            if not bp and melee.name == "Electro"
+               and (ScriptStorage.Melees["Black Leg"] or 0) < (Config.Melee.ElectroAtDarkStepMastery or 400) then
+                -- [FIX] Electro só depois do Dark Step chegar ao mastery alvo
+                continue
+            end
             if not bp then
                 -- [NEW] Dragon Claw V1 cần riêng 1500 Fragments — nếu chưa
                 -- đủ thì đây chính là lý do phải farm raid (raid cho
@@ -6440,10 +6457,11 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         local DOOR_CF = CFrame.new(1347.71, 37.38, -1325.65)
         while task.wait(1) do
             local needSaber = Config.Items.Saber and not ScriptStorage.Backpack.Saber and not (CheckItem and CheckItem("Saber"))
-            -- [FIX] Com 500k Beli e sem Electro: ficar/voltar ao Sea 1 até o comprar
+            -- [FIX] Dark Step no mastery alvo + 500k Beli e sem Electro: ficar/voltar ao Sea 1 até o comprar
             local needElectro = Config.Items.AutoFullyMelees and Config.Melee.AutoBuy
                 and not (CheckItem and CheckItem("Electro"))
                 and (ScriptStorage.PlayerData.Beli or 0) >= 500000
+                and (ScriptStorage.Melees["Black Leg"] or 0) >= (Config.Melee.ElectroAtDarkStepMastery or 400)
             if Config.AutoSea2 and not needSaber and not needElectro and (ScriptStorage.PlayerData.Level or 0) >= 700 and SeaIndex == 1 then
                 local ok, err = pcall(function()
                     _G.SeaTransitionActive = true
