@@ -4782,95 +4782,92 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         end
 
         FunctionsHandler.ElectroQuest:RegisterMethod("Refresh", function()
-            if not _G.__EQActive then return nil end
             if not (Config.Items.AutoFullyMelees and Config.Melee.AutoBuy) then return nil end
             if CheckItem("Electro") then _G.__EQActive = false return nil end
+            -- [FIX] Arranca sozinho assim que o Dark Step chega ao mastery alvo
+            -- (não espera mais pela recusa do servidor)
+            if (ScriptStorage.Melees["Black Leg"] or 0) >= (Config.Melee.ElectroAtDarkStepMastery or 400)
+               and not _G.__BoltDelivered then
+                _G.__EQActive = true
+            end
+            if not _G.__EQActive then return nil end
             return true
         end)
 
         FunctionsHandler.ElectroQuest:RegisterMethod("Start", function()
             -- a quest só existe no Sea 1 (Skylands)
             if SeaIndex ~= 1 then
-                SetTask('MainTask', 'Quest Mad Scientist | A voltar ao Sea 1')
+                SetTask('MainTask', 'Quest Mad Scientist | A viajar para o Sea 1')
                 if tick() - (_G.__LastTravelMain or 0) > 15 then
                     _G.__LastTravelMain = tick()
-                    Remotes.CommF_:InvokeServer("TravelMain")
+                    local r = Remotes.CommF_:InvokeServer("TravelMain")
+                    SetTask('SubTask', 'TravelMain -> ' .. tostring(r))
                 end
                 return
             end
 
             local npcs = workspace:FindFirstChild("NPCs")
             local npc = npcs and npcs:FindFirstChild("Mad Scientist")
+            if not npc then
+                SetTask('MainTask', 'Quest Mad Scientist | Mad Scientist não carregado')
+                SetTask('SubTask', 'Vai às Skylands inferiores (ilha ao nível do mar, por baixo das Skylands)')
+                return
+            end
+
+            local pv = npc:GetPivot()
             local hasBolt = _G.__EQBolt or CheckItem("Lightning Bolt")
 
-            -- 1) ENTREGAR (tem o bolt)
-            if hasBolt then
-                if not npc then SetTask('SubTask', 'Mad Scientist não carregado - aproxima-te das Skylands inferiores') return end
-                local pv = npc:GetPivot()
-                if CaculateDistance(pv) > 8 then
-                    SetTask('MainTask', 'Quest Mad Scientist | A ir entregar o Lightning Bolt')
-                    TweenController.Create(pv * CFrame.new(0, 0, 4))
+            -- 3) já aceitou e ainda sem bolt -> caçar a nuvem (longe do NPC)
+            if _G.__EQAccepted and not hasBolt then
+                SetTask('MainTask', 'Quest Mad Scientist | À procura da nuvem com relâmpagos')
+                local cloud = findCloud()
+                if not cloud then
+                    SetTask('SubTask', 'Nenhuma nuvem carregada encontrada ainda (aparecem de forma aleatória)')
                     return
                 end
-                SetTask('MainTask', 'Quest Mad Scientist | A entregar o Lightning Bolt')
-                talk(npc); task.wait(1)
-                if clickButton({"hand it over"}) then
-                    task.wait(1.5)
-                    _G.__BoltDelivered = true
-                    _G.__EQActive = false
-                    _G.__ElectroBlockedUntil = 0
-                    SetTask('SubTask', '✅ Bolt entregue - a tentar comprar o Electro')
-                else
-                    SetTask('SubTask', 'Não encontrei o botão "Hand it over" (diz-me o que aparece no ecrã)')
+                local hrp = lpE.Character and lpE.Character:FindFirstChild("HumanoidRootPart")
+                if not hrp then return end
+                local target = cloud.Position + Vector3.new(0, -4, 0)
+                if (hrp.Position - target).Magnitude > 6 then
+                    TweenController.Create(CFrame.lookAt(target, cloud.Position))
+                    return
+                end
+                SetTask('SubTask', 'A atacar a nuvem: ' .. cloud.Name)
+                pcall(function()
+                    if _G.SelectWeapon then FunctionsHandler.LocalPlayerController.Methods.EquipTool:Call(_G.SelectWeapon) end
+                end)
+                local vp = workspace.CurrentCamera.ViewportSize
+                for _ = 1, 8 do
+                    VIM:SendMouseButtonEvent(vp.X / 2, vp.Y / 2, 0, true, game, 0)
+                    task.wait(0.05)
+                    VIM:SendMouseButtonEvent(vp.X / 2, vp.Y / 2, 0, false, game, 0)
+                    task.wait(0.15)
                 end
                 return
             end
 
-            -- 2) ACEITAR A QUEST
-            if not _G.__EQAccepted then
-                if not npc then SetTask('SubTask', 'Mad Scientist não carregado - aproxima-te das Skylands inferiores') return end
-                local pv = npc:GetPivot()
-                if CaculateDistance(pv) > 8 then
-                    SetTask('MainTask', 'Quest Mad Scientist | A ir ao Mad Scientist')
-                    TweenController.Create(pv * CFrame.new(0, 0, 4))
-                    return
-                end
-                SetTask('MainTask', 'Quest Mad Scientist | A aceitar a quest')
-                talk(npc); task.wait(1)
-                if clickButton({"get you one"}) then
-                    _G.__EQAccepted = true
-                    SetTask('SubTask', 'Quest aceite - à procura da nuvem')
-                    task.wait(1.5)
-                else
-                    SetTask('SubTask', 'Não encontrei o botão "I\'ll get you one" (diz-me o que aparece no ecrã)')
-                end
+            -- 1/2) falar com o NPC: pagar, entregar ou aceitar, conforme os botões que aparecerem
+            if CaculateDistance(pv) > 8 then
+                SetTask('MainTask', 'Quest Mad Scientist | A ir ao Mad Scientist')
+                TweenController.Create(pv * CFrame.new(0, 0, 4))
                 return
             end
-
-            -- 3) CAÇAR A NUVEM COM RELÂMPAGOS E PARTI-LA
-            SetTask('MainTask', 'Quest Mad Scientist | À procura da nuvem com relâmpagos')
-            local cloud = findCloud()
-            if not cloud then
-                SetTask('SubTask', 'Nenhuma nuvem carregada encontrada ainda (aparecem de forma aleatória)')
-                return
-            end
-            local hrp = lpE.Character and lpE.Character:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-            local target = cloud.Position + Vector3.new(0, -4, 0)
-            if (hrp.Position - target).Magnitude > 6 then
-                TweenController.Create(CFrame.lookAt(target, cloud.Position))
-                return
-            end
-            SetTask('SubTask', 'A atacar a nuvem: ' .. cloud.Name)
-            pcall(function()
-                if _G.SelectWeapon then FunctionsHandler.LocalPlayerController.Methods.EquipTool:Call(_G.SelectWeapon) end
-            end)
-            local vp = workspace.CurrentCamera.ViewportSize
-            for _ = 1, 8 do
-                VIM:SendMouseButtonEvent(vp.X / 2, vp.Y / 2, 0, true, game, 0)
-                task.wait(0.05)
-                VIM:SendMouseButtonEvent(vp.X / 2, vp.Y / 2, 0, false, game, 0)
-                task.wait(0.15)
+            SetTask('MainTask', 'Quest Mad Scientist | A falar com o Mad Scientist')
+            talk(npc); task.wait(1)
+            if clickButton({"pay"}) then
+                task.wait(1.5)
+                _G.__BoltDelivered = true; _G.__EQActive = false; _G.__ElectroBlockedUntil = 0
+                SetTask('SubTask', '✅ Botão de pagar clicado - a verificar o Electro')
+            elseif hasBolt and clickButton({"hand it over"}) then
+                task.wait(1.5)
+                _G.__BoltDelivered = true; _G.__EQActive = false; _G.__ElectroBlockedUntil = 0
+                SetTask('SubTask', '✅ Bolt entregue - a comprar o Electro')
+            elseif not _G.__EQAccepted and clickButton({"get you one"}) then
+                _G.__EQAccepted = true
+                SetTask('SubTask', 'Quest aceite - à procura da nuvem')
+                task.wait(1.5)
+            else
+                SetTask('SubTask', 'Falei com o NPC mas não vi botão conhecido (pay / hand it over / get you one)')
             end
         end)
     end
@@ -6678,7 +6675,9 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         while task.wait(1) do
             local needSaber = Config.Items.Saber and not ScriptStorage.Backpack.Saber and not (CheckItem and CheckItem("Saber"))
             -- [FIX] Dark Step no mastery alvo + 500k Beli e sem Electro: ficar/voltar ao Sea 1 até o comprar
-            local needElectro = false -- [FIX] o Mad Scientist também existe no Sea 2 e 3
+            local needElectro = Config.Items.AutoFullyMelees and Config.Melee.AutoBuy
+                and not (CheckItem and CheckItem("Electro")) and not _G.__BoltDelivered
+                and (ScriptStorage.Melees["Black Leg"] or 0) >= (Config.Melee.ElectroAtDarkStepMastery or 400)
             if Config.AutoSea2 and not needSaber and not needElectro and (ScriptStorage.PlayerData.Level or 0) >= 700 and SeaIndex == 1 then
                 local ok, err = pcall(function()
                     _G.SeaTransitionActive = true
