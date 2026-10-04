@@ -2958,7 +2958,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             -- [FIX] Usar a posição REAL do NPC (se carregado) em vez de só a coordenada fixa
             pcall(function()
                 local npc = ScriptStorage.NPCs and ScriptStorage.NPCs[teacher]
-                if npc and npc:IsDescendantOf(workspace) and npc.WorldPivot then cf = npc.WorldPivot * CFrame.new(0, 0, 4) end
+                if npc and npc.WorldPivot then cf = npc.WorldPivot * CFrame.new(0, 0, 4) end
             end)
             if not cf then
                 if SeaIndex ~= 3 then
@@ -4806,11 +4806,14 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 return
             end
 
+            -- [FIX] O jogo guarda os NPCs longe em ReplicatedStorage.NPCs (com a posição) e só os põe
+            -- no workspace quando estás perto. Procurar nos dois sítios e ir até à posição guardada.
+            local RSNPCs = game:GetService("ReplicatedStorage"):FindFirstChild("NPCs")
             local npcs = workspace:FindFirstChild("NPCs")
-            local npc = npcs and npcs:FindFirstChild("Mad Scientist")
+            local npc = (npcs and npcs:FindFirstChild("Mad Scientist")) or (RSNPCs and RSNPCs:FindFirstChild("Mad Scientist"))
             if not npc then
-                SetTask('MainTask', 'Quest Mad Scientist | Mad Scientist não carregado')
-                SetTask('SubTask', 'Vai às Skylands inferiores (ilha ao nível do mar, por baixo das Skylands)')
+                SetTask('MainTask', 'Quest Mad Scientist | NPC não encontrado em lado nenhum')
+                SetTask('SubTask', 'Manda-me o registo do LogBolt (BombaCat_LogBolt.lua) para eu achar a posição')
                 return
             end
 
@@ -4847,8 +4850,9 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             end
 
             -- 1/2) falar com o NPC: pagar, entregar ou aceitar, conforme os botões que aparecerem
-            if CaculateDistance(pv) > 8 then
+            if CaculateDistance(pv) > 8 or not npc:IsDescendantOf(workspace) then
                 SetTask('MainTask', 'Quest Mad Scientist | A ir ao Mad Scientist')
+                SetTask('SubTask', string.format('Posição do NPC: %.0f, %.0f, %.0f', pv.Position.X, pv.Position.Y, pv.Position.Z))
                 TweenController.Create(pv * CFrame.new(0, 0, 4))
                 return
             end
