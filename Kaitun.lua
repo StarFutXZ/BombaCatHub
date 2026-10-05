@@ -109,7 +109,7 @@ local CoreGui = game:GetService("CoreGui")
 local lp = Players.LocalPlayer
 
 
-print("[BombaCat Hub] A iniciar... BUILD v20 (quest bolt + habilidades)")
+print("[BombaCat Hub] A iniciar... BUILD v22 (dialogo com maos livres)")
 timeee = os.time()
 local W_angle = 30
 local lastChange = tick()
@@ -3952,6 +3952,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     -- ============================================================
     FunctionsHandler.LocalPlayerController:RegisterMethod("EquipTool", function(h)
         if not Humanoid then return end
+        if _G.NoEquip then return end -- [FIX v22] durante o diálogo com o NPC não equipar armas/estilos
         if _G.HoldKey and tostring(h) ~= "Key" then return end
         local bp = LocalPlayer:FindFirstChild("Backpack")
         if not bp then return end
@@ -4731,33 +4732,24 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
 
         local GuiService = game:GetService("GuiService")
 
-        -- procura um botão/texto VISÍVEL. exact=true -> o texto tem de ser igual (ex.: "Talk")
-        local function findGui(pattern, exact)
-            local pgE = lpE:FindFirstChild("PlayerGui")
-            if not pgE then return nil end
-            for _, d in ipairs(pgE:GetDescendants()) do
-                if (d:IsA("TextButton") or d:IsA("TextLabel")) and shown(d) then
-                    local t = tostring(d.Text):lower():gsub("^%s+", ""):gsub("%s+$", "")
-                    if (exact and t == pattern) or (not exact and t:find(pattern, 1, true)) then
-                        return d
-                    end
-                end
-            end
-            return nil
-        end
+        -- [FIX v21] O jogo traduz os textos (o teu cliente está em português: "Interagir"), por isso
+        -- NÃO dá para procurar "Talk" / "I'll get you one". Em vez disso, procura-se a LISTA de opções do
+        -- diálogo (2+ textos empilhados do lado direito) e escolhe-se SEMPRE a 1.ª (a última é o "Nevermind").
+        local function trimText(t) return (tostring(t):gsub("^%s+", ""):gsub("%s+$", "")) end
 
         local function clickGui(target)
-            -- sobe até um botão real, se existir (as opções do diálogo podem ser TextLabel dentro de um botão)
             local btn, p = nil, target
             while p and not p:IsA("LayerCollector") do
                 if p:IsA("GuiButton") then btn = p break end
                 p = p.Parent
             end
+            -- [FIX v22] botão real + firesignal = sem clique no ecrã (que ia atacar com o estilo de luta)
             if btn and firesignal then
                 pcall(function() firesignal(btn.MouseButton1Click) end)
                 pcall(function() firesignal(btn.Activated) end)
+                return true
             end
-            -- clique real no centro (o jogo pode ouvir InputBegan em vez de Click)
+            -- sem botão real: clique no ecrã (só é seguro porque nada está equipado durante o diálogo)
             local ap, as = target.AbsolutePosition, target.AbsoluteSize
             local inset = GuiService:GetGuiInset()
             local x, y = ap.X + as.X / 2, ap.Y + as.Y / 2 + inset.Y
@@ -4767,72 +4759,128 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             return true
         end
 
-        -- opção "genérica": primeira escolha visível do lado direito que não seja Talk/Nevermind
-        local function findGenericOption()
+        -- guarda a arma/estilo e deixa as mãos vazias durante o diálogo
+        local function handsFree()
+            _G.NoEquip = true
+            pcall(function()
+                local hum = lpE.Character and lpE.Character:FindFirstChildOfClass("Humanoid")
+                if hum then hum:UnequipTools() end
+            end)
+        end
+
+        local function getOptions()
             local pgE = lpE:FindFirstChild("PlayerGui")
-            local vp = workspace.CurrentCamera.ViewportSize
-            local best, bestY = nil, math.huge
-            if not pgE then return nil end
+            local cam = workspace.CurrentCamera
+            if not pgE or not cam then return {} end
+            local vp = cam.ViewportSize
+            local cands = {}
             for _, d in ipairs(pgE:GetDescendants()) do
-                if (d:IsA("TextButton") or d:IsA("TextLabel")) and shown(d) then
-                    local t = tostring(d.Text):lower():gsub("^%s+", ""):gsub("%s+$", "")
-                    local ap = d.AbsolutePosition
-                    if #t >= 3 and #t <= 40 and t ~= "talk" and not t:find("nevermind", 1, true)
-                       and ap.X > vp.X * 0.55 and ap.Y > vp.Y * 0.45 and ap.Y < vp.Y * 0.88
-                       and not t:find("^[%d%p%s]+$") then
-                        if ap.Y < bestY then best, bestY = d, ap.Y end
+                if (d:IsA("TextLabel") or d:IsA("TextButton")) and shown(d) then
+                    local t = trimText(d.Text)
+                    local ap, as = d.AbsolutePosition, d.AbsoluteSize
+                    if #t >= 2 and #t <= 45 and as.X > 30 and as.Y > 12 and as.Y < 120
+                       and ap.X > vp.X * 0.45 and ap.Y > vp.Y * 0.35 and ap.Y < vp.Y * 0.9 then
+                        cands[#cands + 1] = d
                     end
                 end
             end
-            return best
+            table.sort(cands, function(x, y) return x.AbsolutePosition.Y < y.AbsolutePosition.Y end)
+            local best = {}
+            for i = 1, #cands do
+                local grp = {cands[i]}
+                for j = i + 1, #cands do
+                    local last = grp[#grp]
+                    local dy = cands[j].AbsolutePosition.Y - last.AbsolutePosition.Y
+                    local dx = math.abs(cands[j].AbsolutePosition.X - last.AbsolutePosition.X)
+                    if dy > 20 and dy < 170 and dx < 120 then grp[#grp + 1] = cands[j] end
+                end
+                if #grp > #best then best = grp end
+            end
+            if #best >= 2 then return best end
+            return {}
         end
 
-        -- Conversa com o Mad Scientist. Fluxo visto no jogo:
-        --  [Talk | Nevermind] -> falas ... -> [I'll get you one | Nevermind]
-        -- Se a quest JÁ foi aceite antes, o NPC não mostra "I'll get you one": nesse caso
-        -- assume-se "já aceite" (fecha o diálogo) ou, se for para entregar, tenta a primeira opção.
-        -- Devolve: "paid" | "delivered" | "accepted" | "assumed" | "tried" | nil
-        local function converse(hasBolt, npc)
-            local t0 = tick()
-            local deadline, lastTalk, lastAdvance = t0 + 30, 0, tick()
-            while tick() < deadline do
-                if hasBolt then
-                    local g = findGui("hand it over") or findGui("hand over")
-                    if g then clickGui(g) return "delivered" end
+        local function optionsText(opts)
+            local t = {}
+            for _, o in ipairs(opts) do t[#t + 1] = trimText(o.Text) end
+            return table.concat(t, " | ")
+        end
+
+        -- abre o diálogo: 1) fireproximityprompt  2) clica no botão do prompt ("Interagir") no ecrã
+        local function openDialogue(npc)
+            local fired = false
+            for _, d in ipairs(npc:GetDescendants()) do
+                if d:IsA("ProximityPrompt") and fireproximityprompt then
+                    pcall(fireproximityprompt, d); fired = true break
                 end
-                local pay = findGui("pay")
-                if pay then clickGui(pay) return "paid" end
-                if not hasBolt then
-                    local g = findGui("get you one")
-                    if g then clickGui(g) return "accepted" end
-                end
-                local t = findGui("talk", true)
-                if t and tick() - lastTalk > 3 then
-                    lastTalk = tick(); lastAdvance = tick()
-                    clickGui(t)
-                else
-                    local never = findGui("nevermind")
-                    -- diálogo aberto mas sem opção conhecida há >10 s => já falámos antes
-                    if never and not t and tick() - t0 > 10 then
-                        if hasBolt then
-                            local g = findGenericOption()
-                            if g then clickGui(g) return "tried" end
-                        end
-                        clickGui(never)
-                        task.wait(1)
-                        return hasBolt and "tried" or "assumed"
+            end
+            task.wait(1.2)
+            if #getOptions() >= 2 then return true end
+            local pgE = lpE:FindFirstChild("PlayerGui")
+            local pp = pgE and pgE:FindFirstChild("ProximityPrompts")
+            if pp then
+                for _, d in ipairs(pp:GetDescendants()) do
+                    if (d:IsA("GuiButton") or d:IsA("TextLabel")) and shown(d) and d.AbsoluteSize.X > 20 then
+                        clickGui(d) task.wait(1.2)
+                        if #getOptions() >= 2 then return true end
                     end
-                    if not t and tick() - lastAdvance > 3.5 then
-                        lastAdvance = tick()
-                        local vp = workspace.CurrentCamera.ViewportSize
-                        VIM:SendMouseButtonEvent(vp.X / 2, vp.Y * 0.82, 0, true, game, 0)
-                        task.wait(0.06)
-                        VIM:SendMouseButtonEvent(vp.X / 2, vp.Y * 0.82, 0, false, game, 0)
+                end
+            end
+            -- último recurso: tecla E (PC)
+            pcall(function() SendKey("E", 0.1) end)
+            task.wait(1.2)
+            return #getOptions() >= 2
+        end
+
+        -- Conversa com o Mad Scientist (sem depender do idioma).
+        -- Devolve: "delivered" | "accepted" | "assumed" | nil (diálogo não abriu)
+        --  * sem bolt: [Talk|Nevermind] -> falas -> [Aceitar|Nevermind]  => 2 cliques = "accepted"
+        --    se fechar com só 1 clique => já tinhas falado antes ("assumed")
+        local function converse(hasBolt, npc)
+            handsFree()
+            local ok, res = pcall(function() return converseInner(hasBolt, npc) end)
+            _G.NoEquip = false
+            if not ok then warn("[BombaCat Hub] converse:", res) return nil end
+            return res
+        end
+
+        function converseInner(hasBolt, npc)
+            local t0 = tick()
+            local deadline = t0 + 60
+            local clicks, lastClick, lastSeen, opened, lastAdvance = 0, 0, tick(), false, tick()
+            while tick() < deadline do
+                handsFree()
+                local opts = getOptions()
+                if #opts >= 2 then
+                    opened = true; lastSeen = tick()
+                    if tick() - lastClick > 2.5 then
+                        lastClick = tick(); clicks = clicks + 1
+                        SetTask('SubTask', 'Opções: ' .. optionsText(opts) .. '  -> escolho a 1.ª')
+                        print("[BombaCat Hub] Opções do diálogo:", optionsText(opts))
+                        clickGui(opts[1])
+                    end
+                else
+                    if not opened then
+                        if tick() - t0 > 1 and not openDialogue(npc) then
+                            SetTask('SubTask', 'Não consegui abrir o diálogo (prompt "Interagir")')
+                        end
+                        if tick() - t0 > 20 then break end
+                    else
+                        if tick() - lastSeen > 8 then break end -- diálogo fechou
+                        if tick() - lastAdvance > 3.5 then
+                            lastAdvance = tick()
+                            local vp = workspace.CurrentCamera.ViewportSize
+                            VIM:SendMouseButtonEvent(vp.X / 2, vp.Y * 0.82, 0, true, game, 0)
+                            task.wait(0.06)
+                            VIM:SendMouseButtonEvent(vp.X / 2, vp.Y * 0.82, 0, false, game, 0)
+                        end
                     end
                 end
                 task.wait(0.4)
             end
-            return nil
+            if not opened then return nil end
+            if hasBolt then return "delivered" end
+            return clicks >= 2 and "accepted" or "assumed"
         end
 
         local function talk(npc)
@@ -4975,29 +5023,20 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 return
             end
             SetTask('MainTask', 'Quest Mad Scientist | A falar com o Mad Scientist')
-            -- se o diálogo ainda não está aberto, abrir (prompt "Talk" do NPC)
-            if not findGui("talk", true) and not findGui("get you one") and not findGui("hand it over") then
-                talk(npc); task.wait(1)
-            end
             local res = converse(hasBolt or _G.__EQCheckNow, npc)
             _G.__EQCheckNow = false
-            if res == "paid" or res == "delivered" then
+            if res == "delivered" then
                 task.wait(1.5)
-                _G.__BoltDelivered = true; _G.__EQActive = false; _G.__ElectroBlockedUntil = 0
-                SetTask('SubTask', res == "paid" and '✅ Pagamento feito - a verificar o Electro' or '✅ Bolt entregue - a comprar o Electro')
-            elseif res == "tried" then
-                -- tentou a 1.ª opção do diálogo; se resultou, o Electro compra-se a seguir
                 _G.__BoltDelivered = true; _G.__EQActive = false; _G.__ElectroBlockedUntil = 0
                 _G.__EQBolt = false
-                SetTask('SubTask', 'Tentei a opção de entrega - a verificar se o Electro já se pode comprar')
-                task.wait(1.5)
+                SetTask('SubTask', 'Entrega tentada - a verificar se o Electro já se pode comprar')
             elseif res == "accepted" or res == "assumed" then
                 _G.__EQAccepted = true
                 _G.__EQHuntSince = tick()
                 SetTask('SubTask', res == "accepted" and 'Quest aceite - à procura da nuvem escura' or 'Já tinhas falado com ele: assumo quest aceite - à procura da nuvem')
                 task.wait(1.5)
             else
-                SetTask('SubTask', 'Falei com o NPC mas não apareceu nenhum botão conhecido (Talk / I\'ll get you one / Hand it over)')
+                SetTask('SubTask', 'O diálogo não abriu (prompt "Interagir"). Fica ao lado do NPC e diz-me o que aparece.')
             end
         end)
     end
