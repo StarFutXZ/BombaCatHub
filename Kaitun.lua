@@ -1,6 +1,7 @@
 Config = {
     Team = "Pirates",
     Configuration = {
+        TweenSpeed = 250, -- velocidade do voo em studs/s (antes 160). Se der kick/anti-cheat, baixa para 200
         HopWhenIdle = true,
         AutoHop = true,
         AutoHopDelay = 60 * 60,
@@ -1699,33 +1700,32 @@ end
         local a = game.Players.LocalPlayer
         repeat task.wait() until a.Character and a.Character.PrimaryPart
         block.CFrame = a.Character.PrimaryPart.CFrame
-        while task.wait() do
+        -- [FIXED - voo sem travadas] Heartbeat em vez de task.wait(); só escreve CanCollide
+        -- quando o estado muda (ou a cada 0.5s para partes novas) em vez de todas as partes em todos os frames.
+        local lastOn, lastRefresh = nil, 0
+        game:GetService("RunService").Heartbeat:Connect(function()
             pcall(function()
-                if getgenv().OnFarm then
-                    if block and block.Parent == workspace then
-                        local b = a.Character and a.Character.PrimaryPart
-                        if b and (b.Position - block.Position).Magnitude <= 200 then
+                local c = a.Character
+                local on = shouldTween and true or false
+                if on and block and block.Parent == workspace then
+                    local b = c and c.PrimaryPart
+                    if b then
+                        if (b.Position - block.Position).Magnitude <= 200 then
                             b.CFrame = block.CFrame
                         else
                             block.CFrame = b.CFrame
                         end
                     end
-                    local c = a.Character
-                    if c then
-                        for _, e in pairs(c:GetChildren()) do
-                            if e:IsA("BasePart") then e.CanCollide = false end
-                        end
-                    end
-                else
-                    local c = a.Character
-                    if c then
-                        for _, e in pairs(c:GetChildren()) do
-                            if e:IsA("BasePart") then e.CanCollide = true end
-                        end
+                end
+                if c and (lastOn ~= on or os.clock() - lastRefresh > 0.5) then
+                    lastOn, lastRefresh = on, os.clock()
+                    local want = not on
+                    for _, e in ipairs(c:GetChildren()) do
+                        if e:IsA("BasePart") and e.CanCollide ~= want then e.CanCollide = want end
                     end
                 end
             end)
-        end
+        end)
     end)
 
     local W = 0
@@ -1798,6 +1798,11 @@ end
     function TweenController.Create(W)
         if not W or TweenDebounce then return end
         local a = typeof(W) ~= 'CFrame' and ConvertTo(CFrame, W) or W
+        -- [FIXED - voo sem travadas] se já está a voar para (quase) o mesmo destino, não reinicia o tween
+        if shouldTween and TweenInstance and TweenTarget and TweenInstance.PlaybackState == Enum.PlaybackState.Playing
+            and (TweenTarget - a.Position).Magnitude < 3 then
+            return
+        end
         if TweenInstance then pcall(function() TweenInstance:Cancel() end) end
         local character = game.Players.LocalPlayer.Character
         local hrp = character and character:FindFirstChild("HumanoidRootPart")
@@ -1807,9 +1812,7 @@ end
         -- nhánh BypassTP (dist>=4000 → đổi spawn point) — không còn dùng
         -- cơ chế bypass qua spawn point nữa, mọi khoảng cách đều tween bình
         -- thường qua block (từ main_red_magic_beta.txt).
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = false end
-        end
+        -- (CanCollide é tratado uma vez por mudança de estado no loop Heartbeat acima)
         local head = character:WaitForChild("Head")
         if not head:FindFirstChild("eltrul") then
             local bv = Instance.new('BodyVelocity')
@@ -1848,25 +1851,21 @@ end
         -- quá 160"] Bỏ hẳn bảng 110/100 cũ — dùng 1 mức tốc độ CỐ ĐỊNH 160
         -- (giống tween của main_red_magic_beta.txt, chỉ đổi số chia 300 →
         -- 160 để nhanh hơn), không có mức nào vượt quá con số này.
-        local divisor = 160
+        local divisor = (Config.Configuration and Config.Configuration.TweenSpeed) or 250 -- studs/s (antes fixo 160)
         local duration = dist / divisor
 
         -- [FIXED - port tween từ main_red_magic_beta.txt] Tween "block"
         -- (Part vô hình) thay vì tween thẳng hrp — nhân vật tự bám theo
         -- block qua vòng lặp sync đã thêm ở trên (getgenv().OnFarm).
         shouldTween = true
-        TweenInstance = Services.TweenService:Create(block, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = a})
-        TweenInstance:Play()
-        task.spawn(function()
-            while TweenInstance and TweenInstance.PlaybackState == Enum.PlaybackState.Playing do
-                if not shouldTween then
-                    pcall(function() TweenInstance:Cancel() end)
-                    break
-                end
-                task.wait(0.1)
-            end
-            shouldTween = false
+        TweenTarget = a.Position
+        local thisTween = Services.TweenService:Create(block, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = a})
+        TweenInstance = thisTween
+        thisTween.Completed:Connect(function()
+            -- só limpa se este ainda for o tween atual (um tween novo não é afetado)
+            if TweenInstance == thisTween then shouldTween = false end
         end)
+        thisTween:Play()
     end
 
     -- ============================================================
@@ -2277,6 +2276,79 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             end
         end
         return nil
+    end
+
+    -- ============================================================
+    -- V1BuyOverride: COMPRA PRIORITÁRIA dos estilos V1 (Dark Step -> Electro -> Fishman)
+    -- Corre no INÍCIO do RefreshTasksData, antes de qualquer tarefa (farm, boss, raid, Saber...).
+    -- Quando já há Beli (e mestria do estilo anterior), vai ao professor, espera chegar e compra.
+    -- Não depende da ordem do TasksOrder nem do MeleesController.
+    -- Devolve true se tratou este ciclo (o dispatcher não deve correr mais nada).
+    -- ============================================================
+    local V1_BUY = {
+        ["Black Leg"] = {key = "BlackLeg", locs = {
+            [1] = CFrame.new(-983.62, 12.44, 3990.46),
+            [2] = CFrame.new(-4752.44, 33.92, -4848.04),
+            [3] = CFrame.new(-5045.61, 370.01, -3182.31)}},
+        ["Electro"] = {key = "Electro", locs = {
+            [1] = CFrame.new(-5382.79, 12.55, -2148.82),
+            [2] = CFrame.new(-4866.16, 33.92, -4767.11),
+            [3] = CFrame.new(-4996.06, 313.21, -3201.83)}},
+        ["Fishman Karate"] = {key = "FishmanKarate", locs = {
+            [1] = CFrame.new(61586.96, 19.58, 987.59),
+            [2] = CFrame.new(-4957.68, 35.94, -4665.6),
+            [3] = CFrame.new(-5023.91, 371.02, -3191.46)}},
+    }
+    local V1BuyCooldownUntil = 0
+
+    function V1BuyOverride()
+        if not (Config.Items and Config.Items.AutoFullyMelees and Config.Melee and Config.Melee.AutoBuy) then return false end
+        if os.time() < V1BuyCooldownUntil then return false end
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then return false end
+        if V1MeleeStatus() ~= "buy" then return false end
+
+        -- descobre qual estilo é o próximo
+        local target
+        for _, n in ipairs({"Black Leg", "Electro", "Fishman Karate"}) do
+            if not CheckItem(n) then target = n break end
+        end
+        local info = target and V1_BUY[target]
+        if not info then return false end
+        local cf = info.locs[SeaIndex]
+        if not cf then return false end
+
+        SetTask('MainTask', 'Auto Full Melee | A ir comprar ' .. target .. ' (Beli: ' .. tostring(ScriptStorage.PlayerData.Beli) .. ')')
+
+        -- 1) viaja até ao professor (espera chegar; no máximo 90s)
+        local t0 = os.clock()
+        while CaculateDistance(cf) > 8 and os.clock() - t0 < 90 and not _G.Stop do
+            TweenController.Create(cf)
+            task.wait(0.1)
+            -- se o Beli baixou entretanto, cancela
+            if V1MeleeStatus() ~= "buy" then return true end
+        end
+        if CaculateDistance(cf) > 8 then
+            SetTask('SubTask', 'Não consegui chegar ao professor de ' .. target .. ' — volto a tentar em 20s')
+            V1BuyCooldownUntil = os.time() + 20
+            return true
+        end
+
+        -- 2) compra (mesmo processo de 2 passos do BuyMelee)
+        local checkOk = BuyMelee(info.key, true)
+        task.wait(0.3)
+        local buyRes = BuyMelee(info.key)
+        task.wait(0.6)
+        if CheckItem(target) then
+            SetTask('MainTask', 'Auto Full Melee | ✅ Comprou ' .. target)
+            print("[Melee] comprou", target)
+        else
+            SetTask('SubTask', 'Compra ' .. target .. ' falhou | check=' .. tostring(checkOk) .. ' | compra=' .. tostring(buyRes) .. ' | Beli=' .. tostring(ScriptStorage.PlayerData.Beli))
+            print("[Melee] compra falhou:", target, "check=", checkOk, "compra=", buyRes)
+            V1BuyCooldownUntil = os.time() + 20
+        end
+        return true
     end
 
     FunctionsHandler.MeleesController:RegisterMethod("Refresh", function()
@@ -5729,6 +5801,12 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     ParsingTimes = 0
     function RefreshTasksData()
         if _G.Stop then return end
+        -- [NEW] compra prioritária do Dark Step / Electro / Fishman Karate (passa à frente do farm)
+        if ParsingTimes > 100 and V1BuyOverride then
+            local okO, tookOver = pcall(V1BuyOverride)
+            if okO and tookOver then return end
+            if not okO then print("[ Error ] V1BuyOverride:", tookOver) end
+        end
         for W, W in TasksOrder do
             local h = FunctionsHandler[W]
             if not h.Initalized then
@@ -6163,7 +6241,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     end
 end
 
-hoangtuveu()
+-- [FIXED] O bloco EXTRAS (gacha, códigos, no-animation) estava DEPOIS desta chamada, que nunca
+-- retorna (ciclo infinito), por isso nunca corria. Agora corre antes.
 --============================================================
 -- [EXTRAS] NO ANIMATION + AUTO REDEEM CODES + AUTO RANDOM FRUIT (GACHA)
 -- Opções (pode editar/desligar):
@@ -6172,6 +6251,7 @@ Config.Extras = {
     AutoRedeemCodes  = true,   -- resgata todos os códigos no início
     AutoGachaFruit   = true,   -- rola o Gacha (Random Fruit) automaticamente
     GachaInterval    = 5,      -- segundos entre cada checagem do gacha
+    GachaAfterV1Melees = true, -- só rola o gacha depois de comprar Dark Step, Electro e Fishman Karate
 }
 --============================================================
 task.spawn(function()
@@ -6246,7 +6326,15 @@ task.spawn(function()
 
     task.spawn(function()
         while task.wait(Config.Extras.GachaInterval or 5) do
-            if getgenv().AutoRandomFruit and Config.Extras.AutoGachaFruit then
+            -- Não gasta Beli no gacha enquanto ainda faltam estilos V1 (Dark Step/Electro/Fishman):
+            -- o gacha gastava o dinheiro antes (ou durante a viagem até ao professor) e o Beli
+            -- caía abaixo de 150k, por isso o script voltava ao farm.
+            local holdForMelee = false
+            if Config.Extras.GachaAfterV1Melees ~= false and V1MeleeStatus then
+                local okS, st = pcall(V1MeleeStatus)
+                holdForMelee = okS and st ~= nil
+            end
+            if getgenv().AutoRandomFruit and Config.Extras.AutoGachaFruit and not holdForMelee then
                 local ok, result = GachaCall("Check")
                 if ok and typeof(result) == "table" and result.RequirementsMet then
                     local ok2, r2 = GachaCall("Purchase")
@@ -6264,6 +6352,8 @@ task.spawn(function()
     }
 end)
 
+
+hoangtuveu()
 --============================================================
 -- [VOID ATTACK] ATAQUE ENVIADO PELO USUARIO
 --============================================================
