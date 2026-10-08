@@ -1714,6 +1714,15 @@ end
                 end
             end
         end)
+        -- [FIXED] Ao morrer/reaparecer o tween antigo continuava a correr com o block na posição velha:
+        -- o dedupe impedia de o reiniciar e o novo personagem ficava preso/lento. Agora limpa tudo.
+        a.CharacterAdded:Connect(function(char)
+            pcall(function() if TweenInstance then TweenInstance:Cancel() end end)
+            shouldTween = false
+            TweenTarget = nil
+            local root = char:WaitForChild("HumanoidRootPart", 10)
+            if root and block then block.CFrame = root.CFrame end
+        end)
         local lastOn, lastRefresh = nil, 0
         RunService.Heartbeat:Connect(function()
             pcall(function()
@@ -1813,9 +1822,14 @@ end
         if not W or TweenDebounce then return end
         local a = typeof(W) ~= 'CFrame' and ConvertTo(CFrame, W) or W
         -- [FIXED - voo sem travadas] se já está a voar para (quase) o mesmo destino, não reinicia o tween
-        if shouldTween and TweenInstance and TweenTarget and TweenInstance.PlaybackState == Enum.PlaybackState.Playing
-            and (TweenTarget - a.Position).Magnitude < 3 then
-            return
+        do
+            local ch = game.Players.LocalPlayer.Character
+            local root = ch and ch:FindFirstChild("HumanoidRootPart")
+            if shouldTween and TweenInstance and TweenTarget and TweenInstance.PlaybackState == Enum.PlaybackState.Playing
+                and (TweenTarget - a.Position).Magnitude < 3
+                and root and (root.Position - block.Position).Magnitude < 60 then
+                return
+            end
         end
         if TweenInstance then pcall(function() TweenInstance:Cancel() end) end
         local character = game.Players.LocalPlayer.Character
