@@ -1,3 +1,39 @@
+-- [DIAG darkstep-fix3] Texto sempre visível no ecrã (funciona no telemóvel).
+-- Aparece logo que ESTE ficheiro começa a correr: se não vires a barra amarela no topo, o jogo
+-- não está a executar esta versão do script.
+local _V1DiagLabel
+function V1Show(txt)
+    pcall(function()
+        if not _V1DiagLabel or not _V1DiagLabel.Parent then
+            local parent
+            pcall(function() parent = gethui and gethui() end)
+            if not parent then pcall(function() parent = game:GetService("CoreGui") end) end
+            if not parent then parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui") end
+            local g = Instance.new("ScreenGui")
+            g.Name = "KaitunV1Diag"
+            g.ResetOnSpawn = false
+            g.IgnoreGuiInset = true
+            g.DisplayOrder = 999
+            g.Parent = parent
+            local l = Instance.new("TextLabel")
+            l.Size = UDim2.new(1, -215, 0, 34)
+            l.Position = UDim2.new(0, 205, 0, 2)
+            l.BackgroundColor3 = Color3.new(0, 0, 0)
+            l.BackgroundTransparency = 0.3
+            l.TextColor3 = Color3.fromRGB(255, 255, 0)
+            l.TextSize = 12
+            l.TextWrapped = true
+            l.Font = Enum.Font.SourceSansBold
+            l.TextXAlignment = Enum.TextXAlignment.Left
+            l.TextYAlignment = Enum.TextYAlignment.Top
+            l.Parent = g
+            _V1DiagLabel = l
+        end
+        _V1DiagLabel.Text = " " .. txt
+    end)
+end
+V1Show("[Kaitun darkstep-fix3] ficheiro novo carregado — a iniciar...")
+
 Config = {
     Team = "Pirates",
     Configuration = {
@@ -2340,7 +2376,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     }
     local V1BuyCooldownUntil = 0
     local V1DiagAt = 0
-    local V1_BUILD = "darkstep-fix2"
+    local V1_BUILD = "darkstep-fix3"
     print("[Kaitun] build " .. V1_BUILD .. " carregada (compra prioritária do Dark Step ativa)")
 
     -- Faz a viagem + compra de UM estilo. force = ignora as verificações de Beli/estado (teste manual).
@@ -2356,7 +2392,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
 
         -- 1) viaja até ao professor (espera chegar; no máximo 90s)
         local t0 = os.clock()
-        while CaculateDistance(cf) > 8 and os.clock() - t0 < 90 and not _G.Stop do
+        while CaculateDistance(cf) > 8 and os.clock() - t0 < 90 and not (_G.Stop and not V1OwnStop) do
             TweenController.Create(cf)
             task.wait(0.1)
             if not force and V1MeleeStatus() ~= "buy" then return true end -- Beli baixou: cancela
@@ -2392,34 +2428,10 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         return V1DoBuy("Black Leg", true)
     end
 
-    -- Texto SEMPRE visível no ecrã (útil no telemóvel, onde não há consola):
-    -- mostra o que o script está a ver para a compra do Dark Step.
-    local V1DiagLabel
-    function V1Show(txt)
-        pcall(function()
-            if not V1DiagLabel or not V1DiagLabel.Parent then
-                local g = Instance.new("ScreenGui")
-                g.Name = "KaitunV1Diag"
-                g.ResetOnSpawn = false
-                g.DisplayOrder = 99
-                g.Parent = game:GetService("CoreGui")
-                local l = Instance.new("TextLabel")
-                l.Size = UDim2.new(1, 0, 0, 20)
-                l.Position = UDim2.new(0, 0, 0, 0)
-                l.BackgroundColor3 = Color3.new(0, 0, 0)
-                l.BackgroundTransparency = 0.4
-                l.TextColor3 = Color3.fromRGB(255, 255, 0)
-                l.TextSize = 13
-                l.Font = Enum.Font.SourceSansBold
-                l.TextXAlignment = Enum.TextXAlignment.Left
-                l.Parent = g
-                V1DiagLabel = l
-            end
-            V1DiagLabel.Text = " " .. txt
-        end)
-    end
-
+    V1LastHookAt = 0
+    V1OwnStop = false
     function V1BuyOverride()
+        V1LastHookAt = os.clock()
         if not (Config.Items and Config.Items.AutoFullyMelees and Config.Melee and Config.Melee.AutoBuy) then
             V1Show("[V1 " .. V1_BUILD .. "] desligado na config (AutoFullyMelees/AutoBuy)")
             return false
@@ -2450,6 +2462,41 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         if not target then return false end
         return V1DoBuy(target, false)
     end
+
+    -- Thread própria: mostra o estado e, se o hook do dispatcher NÃO estiver a correr, faz ela a compra.
+    task.spawn(function()
+        local busy = false
+        while task.wait(1) do
+            local ok, err = pcall(function()
+                if os.clock() - V1LastHookAt < 5 then return end -- o hook normal está vivo: ele trata de tudo
+                if not (ScriptStorage and ScriptStorage.PlayerData and ScriptStorage.PlayerData.Level) then
+                    V1Show("[V1 " .. V1_BUILD .. " THREAD] a aguardar dados do jogador...")
+                    return
+                end
+                local st = V1MeleeStatus()
+                local cd = V1BuyCooldownUntil - os.time()
+                V1Show(string.format("[V1 %s THREAD] hook parado | estado=%s | Beli=%s | Black Leg=%s | Sea=%s | cd=%s",
+                    V1_BUILD, tostring(st), tostring(V1Beli()), tostring(CheckItem("Black Leg") and true or false),
+                    tostring(SeaIndex), tostring(math.max(0, cd))))
+                if st ~= "buy" or cd > 0 or busy then return end
+                local target
+                for _, n in ipairs({"Black Leg", "Electro", "Fishman Karate"}) do
+                    if not CheckItem(n) then target = n break end
+                end
+                if not target then return end
+                busy = true
+                local prev = _G.Stop
+                V1OwnStop = true
+                _G.Stop = true -- pausa o farm enquanto compra
+                local okB, errB = pcall(V1DoBuy, target, false)
+                _G.Stop = prev
+                V1OwnStop = false
+                busy = false
+                if not okB then V1Show("[V1 THREAD] ERRO na compra: " .. tostring(errB)) end
+            end)
+            if not ok then V1Show("[V1 THREAD] ERRO: " .. tostring(err)) end
+        end
+    end)
 
     FunctionsHandler.MeleesController:RegisterMethod("Refresh", function()
         if not Config.Items.AutoFullyMelees or not Config.Melee.AutoBuy then return nil end
