@@ -1700,30 +1700,44 @@ end
         local a = game.Players.LocalPlayer
         repeat task.wait() until a.Character and a.Character.PrimaryPart
         block.CFrame = a.Character.PrimaryPart.CFrame
-        -- [FIXED - voo sem travadas] Heartbeat em vez de task.wait(); só escreve CanCollide
-        -- quando o estado muda (ou a cada 0.5s para partes novas) em vez de todas as partes em todos os frames.
+        -- [FIXED - voo] Noclip no Stepped (antes da física, TODOS os frames enquanto voa — o Humanoid volta a
+        -- ligar a colisão sozinho; se não for escrita todo o frame o personagem bate no mapa e fica lento).
+        -- Só escreve nas partes que estão com CanCollide ligado, por isso é barato.
+        local RunService = game:GetService("RunService")
+        RunService.Stepped:Connect(function()
+            if shouldTween then
+                local c = a.Character
+                if c then
+                    for _, e in ipairs(c:GetChildren()) do
+                        if e:IsA("BasePart") and e.CanCollide then e.CanCollide = false end
+                    end
+                end
+            end
+        end)
         local lastOn, lastRefresh = nil, 0
-        game:GetService("RunService").Heartbeat:Connect(function()
+        RunService.Heartbeat:Connect(function()
             pcall(function()
                 local c = a.Character
                 local on = shouldTween and true or false
-                if on and block and block.Parent == workspace then
-                    local b = c and c.PrimaryPart
-                    if b then
-                        if (b.Position - block.Position).Magnitude <= 200 then
-                            b.CFrame = block.CFrame
-                        else
-                            block.CFrame = b.CFrame
+                if on then
+                    if block and block.Parent == workspace then
+                        local b = c and c.PrimaryPart
+                        if b then
+                            if (b.Position - block.Position).Magnitude <= 200 then
+                                b.CFrame = block.CFrame
+                            else
+                                block.CFrame = b.CFrame
+                            end
                         end
                     end
-                end
-                if c and (lastOn ~= on or os.clock() - lastRefresh > 0.5) then
-                    lastOn, lastRefresh = on, os.clock()
-                    local want = not on
+                elseif c and (lastOn ~= on or os.clock() - lastRefresh > 0.5) then
+                    -- parado: volta a ligar as colisões (só na transição / de 0.5 em 0.5s)
+                    lastRefresh = os.clock()
                     for _, e in ipairs(c:GetChildren()) do
-                        if e:IsA("BasePart") and e.CanCollide ~= want then e.CanCollide = want end
+                        if e:IsA("BasePart") and not e.CanCollide then e.CanCollide = true end
                     end
                 end
+                lastOn = on
             end)
         end)
     end)
@@ -1865,6 +1879,9 @@ end
             -- só limpa se este ainda for o tween atual (um tween novo não é afetado)
             if TweenInstance == thisTween then shouldTween = false end
         end)
+        -- começa sempre a partir da posição real do personagem (evita o block ficar com posição antiga
+        -- e o personagem ficar parado/lento à espera de o tween chegar perto dele)
+        block.CFrame = hrp.CFrame
         thisTween:Play()
     end
 
@@ -2260,6 +2277,14 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     -- "buy"  = o próximo estilo já pode ser comprado agora
     -- "wait" = falta dinheiro ou a mestria do estilo anterior
     -- nil    = os 3 já estão comprados
+    -- Beli com fallback direto para LocalPlayer.Data.Beli (caso PlayerData ainda não tenha a chave)
+    function V1Beli()
+        local b = ScriptStorage and ScriptStorage.PlayerData and ScriptStorage.PlayerData.Beli
+        if b then return b end
+        local d = LocalPlayer and LocalPlayer:FindFirstChild("Data")
+        local v = d and d:FindFirstChild("Beli")
+        return v and v.Value or 0
+    end
     function V1MeleeStatus()
         local switchAt = (Config.Melee and Config.Melee.SwitchAtMastery) or 400
         local V1Seq = {
@@ -2269,7 +2294,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         }
         for _, s in ipairs(V1Seq) do
             if not CheckItem(s[1]) then
-                local beli = ScriptStorage.PlayerData.Beli or 0
+                local beli = V1Beli()
                 local prevOk = (not s[3]) or (ScriptStorage.Melees[s[3]] or 0) >= switchAt
                 if prevOk and beli >= s[2] then return "buy" end
                 return "wait"
@@ -2300,37 +2325,31 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             [3] = CFrame.new(-5023.91, 371.02, -3191.46)}},
     }
     local V1BuyCooldownUntil = 0
+    local V1DiagAt = 0
+    local V1_BUILD = "darkstep-fix2"
+    print("[Kaitun] build " .. V1_BUILD .. " carregada (compra prioritária do Dark Step ativa)")
 
-    function V1BuyOverride()
-        if not (Config.Items and Config.Items.AutoFullyMelees and Config.Melee and Config.Melee.AutoBuy) then return false end
-        if os.time() < V1BuyCooldownUntil then return false end
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not hum or hum.Health <= 0 then return false end
-        if V1MeleeStatus() ~= "buy" then return false end
-
-        -- descobre qual estilo é o próximo
-        local target
-        for _, n in ipairs({"Black Leg", "Electro", "Fishman Karate"}) do
-            if not CheckItem(n) then target = n break end
-        end
-        local info = target and V1_BUY[target]
+    -- Faz a viagem + compra de UM estilo. force = ignora as verificações de Beli/estado (teste manual).
+    local function V1DoBuy(target, force)
+        local info = V1_BUY[target]
         if not info then return false end
         local cf = info.locs[SeaIndex]
-        if not cf then return false end
-
-        SetTask('MainTask', 'Auto Full Melee | A ir comprar ' .. target .. ' (Beli: ' .. tostring(ScriptStorage.PlayerData.Beli) .. ')')
+        if not cf then
+            print("[Melee] sem coordenadas do professor de " .. target .. " no Sea " .. tostring(SeaIndex))
+            return false
+        end
+        SetTask('MainTask', 'Auto Full Melee | A ir comprar ' .. target .. ' (Beli: ' .. tostring(V1Beli()) .. ')')
 
         -- 1) viaja até ao professor (espera chegar; no máximo 90s)
         local t0 = os.clock()
         while CaculateDistance(cf) > 8 and os.clock() - t0 < 90 and not _G.Stop do
             TweenController.Create(cf)
             task.wait(0.1)
-            -- se o Beli baixou entretanto, cancela
-            if V1MeleeStatus() ~= "buy" then return true end
+            if not force and V1MeleeStatus() ~= "buy" then return true end -- Beli baixou: cancela
         end
         if CaculateDistance(cf) > 8 then
             SetTask('SubTask', 'Não consegui chegar ao professor de ' .. target .. ' — volto a tentar em 20s')
+            print("[Melee] não chegou ao professor de", target, "distância:", CaculateDistance(cf))
             V1BuyCooldownUntil = os.time() + 20
             return true
         end
@@ -2344,11 +2363,46 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             SetTask('MainTask', 'Auto Full Melee | ✅ Comprou ' .. target)
             print("[Melee] comprou", target)
         else
-            SetTask('SubTask', 'Compra ' .. target .. ' falhou | check=' .. tostring(checkOk) .. ' | compra=' .. tostring(buyRes) .. ' | Beli=' .. tostring(ScriptStorage.PlayerData.Beli))
-            print("[Melee] compra falhou:", target, "check=", checkOk, "compra=", buyRes)
+            SetTask('SubTask', 'Compra ' .. target .. ' falhou | check=' .. tostring(checkOk) .. ' | compra=' .. tostring(buyRes) .. ' | Beli=' .. tostring(V1Beli()))
+            print("[Melee] compra falhou:", target, "check=", checkOk, "compra=", buyRes, "Beli=", V1Beli())
             V1BuyCooldownUntil = os.time() + 20
         end
         return true
+    end
+
+    -- Teste manual (consola do executor):  getgenv().BuyDarkStepNow()
+    getgenv().BuyDarkStepNow = function()
+        print("[Melee] teste manual: a comprar Black Leg (Dark Step) já")
+        return V1DoBuy("Black Leg", true)
+    end
+
+    function V1BuyOverride()
+        if not (Config.Items and Config.Items.AutoFullyMelees and Config.Melee and Config.Melee.AutoBuy) then return false end
+
+        -- diagnóstico a cada 3s: mostra o que o script está a ver
+        if Config.Melee.Debug ~= false and os.clock() - V1DiagAt > 3 then
+            V1DiagAt = os.clock()
+            local st = V1MeleeStatus()
+            print(string.format("[V1] build=%s | estado=%s | Beli=%s | tem Black Leg=%s | Sea=%s | cooldown=%s",
+                V1_BUILD, tostring(st), tostring(V1Beli()), tostring(CheckItem("Black Leg") and true or false),
+                tostring(SeaIndex), tostring(math.max(0, V1BuyCooldownUntil - os.time()))))
+            if st == "wait" then
+                SetTask('SubTask', 'Estilo V1: a juntar Beli (' .. tostring(V1Beli()) .. ') / ou a aguardar mestria do anterior')
+            end
+        end
+
+        if os.time() < V1BuyCooldownUntil then return false end
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then return false end
+        if V1MeleeStatus() ~= "buy" then return false end
+
+        local target
+        for _, n in ipairs({"Black Leg", "Electro", "Fishman Karate"}) do
+            if not CheckItem(n) then target = n break end
+        end
+        if not target then return false end
+        return V1DoBuy(target, false)
     end
 
     FunctionsHandler.MeleesController:RegisterMethod("Refresh", function()
