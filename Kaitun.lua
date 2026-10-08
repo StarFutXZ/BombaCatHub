@@ -45,9 +45,14 @@ Config = {
         CheckMasteryAfterBuy = true,
         RaidAtV1Mastery      = 500,
         GodhumanAtV2Mastery  = 400,
+        SwitchAtMastery      = 400, -- troca para o próximo estilo V1 (e compra-o) quando o atual chega a este valor
     },
     AutoKen = true,
     BringMobs = true,
+    -- Só ataca bosses (BossesTask/SpecialBossesTask) quando precisa mesmo do que eles dão.
+    -- BossAlwaysKill: bosses que queres matar sempre, ex.: {["Core"] = true, ["Katakuri"] = true}
+    BossOnlyIfNeeded = true,
+    BossAlwaysKill = {},
     PanicMode = {
         Enabled          = true,
         LowHealthPercent = 20,
@@ -90,10 +95,27 @@ task.spawn(function()
             local bp = LocalPlayer:FindFirstChild("Backpack")
             if not bp then return end
             if _G.ChooseWP == "Melee" then
-                for _, v in pairs(bp:GetChildren()) do
-                    if v:IsA("Tool") and v.ToolTip == "Melee" then
-                        _G.SelectWeapon = v.Name
-                        break
+                -- Estilo de luta: usa o primeiro estilo V1 (Black Leg -> Electro -> Fishman Karate -> ...)
+                -- que ainda esteja abaixo de Config.Melee.SwitchAtMastery; quando todos chegam lá, fica no último.
+                local char = LocalPlayer.Character
+                local switchAt = (Config.Melee and Config.Melee.SwitchAtMastery) or 400
+                local picked, lastOwned
+                for _, n in ipairs({"Black Leg", "Electro", "Fishman Karate", "Dragon Claw", "Superhuman"}) do
+                    if bp:FindFirstChild(n) or (char and char:FindFirstChild(n)) then
+                        lastOwned = n
+                        local m = (ScriptStorage and ScriptStorage.Melees and ScriptStorage.Melees[n]) or 0
+                        if m < switchAt then picked = n break end
+                    end
+                end
+                picked = picked or lastOwned
+                if picked then
+                    _G.SelectWeapon = picked
+                else
+                    for _, v in pairs(bp:GetChildren()) do
+                        if v:IsA("Tool") and v.ToolTip == "Melee" then
+                            _G.SelectWeapon = v.Name
+                            break
+                        end
                     end
                 end
             elseif _G.ChooseWP == "Sword" then
@@ -1340,9 +1362,11 @@ end
     TasksOrder = {
         "SpecialBossesTask", "SwordBossTask", "BossesTask",
         "RaidController", "AutoRaidIce",
+        "Saber",
         "CakePrinceTask", "MeleesController",
-        "LevelFarm", "Tushita", 'Yama',
-        "Saber", "CursedDualKatana", "SoulGuitar", "EvoRace", "RaceAwakening",
+        "Tushita", 'Yama',
+        "CursedDualKatana", "SoulGuitar", "EvoRace", "RaceAwakening",
+        "LevelFarm",
         -- [FIXED - xung đột code phát hiện khi rà toàn bộ] Bỏ "Wenlocktoad"
         -- và "ExpRedeem" khỏi danh sách này — cả 2 CÓ gọi :Register() (tạo
         -- task slot rỗng) nhưng KHÔNG hề có RegisterMethod("Refresh"/"Start")
@@ -1908,75 +1932,75 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     CombatController = {GRAB = false, GRAB_DISTANCE = SeaIndex == 1 and 250 or 350, MAX_ATTACK_DURATION = 2, MAX_ATTACK_DURATION_2 = 60, LEVITATE_TIME = 0, CurrentIndex = 1}
 
     -- ============================================================
-    -- BRING MOBS (portado do Main_Bom)
-    -- Agrupa os mobs do mesmo nome em volta do alvo atual (MonResult).
+    -- BRING MOBS (portado do Main.txt — module.BringEnemies)
+    -- Para cada mob vivo com o mesmo nome do alvo: se o executor for
+    -- network owner e estiver a <= BRING_DISTANCE de ti, desliga colisão
+    -- de todas as partes, trava com BodyVelocity "Lock", WalkSpeed 0 e
+    -- teleporta o modelo para o CFrame do alvo.
     -- Liga/desliga com Config.BringMobs. Chamado dentro do CombatController.Grab.
     -- ============================================================
-    local function _bmAlive(enemy)
-        local hum = enemy:FindFirstChildOfClass("Humanoid")
-        local root = enemy:FindFirstChild("HumanoidRootPart")
-        return hum and root and hum.Health > 0, root, hum
+    local BRING_DISTANCE = 500 -- mesmo valor fixo usado no Main.txt
+
+    local function _bmAlive(m)
+        return m and not m:FindFirstChild("VehicleSeat")
+            and m:FindFirstChild("Humanoid") and m.Humanoid.Health > 0
+            and m:FindFirstChild("HumanoidRootPart")
     end
-    local function _bmNetwork(part)
+    local function _bmPlayerNear(pos)
+        local chars = workspace:FindFirstChild("Characters")
+        if not chars then return false end
+        for _, c in ipairs(chars:GetChildren()) do
+            if _bmAlive(c) and c.Name ~= LocalPlayer.Name
+                and (c.HumanoidRootPart.Position - pos).Magnitude <= 1000 then
+                return true
+            end
+        end
+        return false
+    end
+    local function _bmOwner(part)
         if isnetworkowner then
             local ok, res = pcall(isnetworkowner, part)
             return ok and res
         end
-        return part.ReceiveAge == 0 and not part.Anchored and part.Velocity.Magnitude > 0
+        return part.ReceiveAge == 0 and _bmPlayerNear(part.Position)
     end
 
     BringEnemy = function(Mon)
         if not Config.BringMobs then return end
         Mon = Mon or MonResult
-        if not Mon or not Mon:FindFirstChild("HumanoidRootPart") then return end
+        if not _bmAlive(Mon) then return end
         local enemyFolder = workspace:FindFirstChild("Enemies")
-        if not enemyFolder then return end
+        local myChar = LocalPlayer.Character
+        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if not enemyFolder or not myRoot then return end
 
         pcall(function()
             if sethiddenproperty then
                 sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
             end
-
-            local targetPos = Mon.HumanoidRootPart.Position
-            local AreaMob = false
-
-            for _, v in ipairs(enemyFolder:GetChildren()) do
-                if v ~= Mon and v.Name == Mon.Name then
-                    local alive, root, hum = _bmAlive(v)
-                    if alive then
-                        local distance = (root.Position - targetPos).Magnitude
-                        if distance <= 3000 then
-                            local bv = root:FindFirstChild("BodyVelocity")
-                            if not bv then
-                                bv = Instance.new("BodyVelocity")
-                                bv.Name = "BodyVelocity"
-                                bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-                                bv.Velocity = Vector3.zero
-                                bv.Parent = root
+            local TargetPos = Mon.HumanoidRootPart.CFrame
+            for _, v in next, enemyFolder:GetChildren() do
+                if v.Name == Mon.Name and _bmAlive(v) then
+                    local hrp = v.HumanoidRootPart
+                    if _bmOwner(hrp) and (hrp.Position - myRoot.Position).Magnitude <= BRING_DISTANCE then
+                        pcall(function()
+                            for _, a in pairs(v:GetChildren()) do
+                                if a:IsA("BasePart") then
+                                    a.CanCollide = false
+                                end
                             end
-
-                            if distance <= 10 then
-                                AreaMob = true
+                            if not hrp:FindFirstChild("Lock") then
+                                local Lock = Instance.new("BodyVelocity")
+                                Lock.Name = "Lock"
+                                Lock.Parent = hrp
+                                Lock.Velocity = Vector3.new(0, 0, 0)
+                                Lock.MaxForce = Vector3.new(10000, 10000, 10000)
                             end
-
-                            if not AreaMob and _bmNetwork(root) then
-                                root.CFrame = CFrame.new(targetPos)
-                            end
-
-                            root.CanCollide = false
-                            hum.WalkSpeed = 0
-                            hum.JumpPower = 0
-                        end
+                            v.Humanoid.WalkSpeed = 0
+                            v:SetPrimaryPartCFrame(TargetPos)
+                        end)
                     end
                 end
-            end
-
-            local mhrp = Mon:FindFirstChild("HumanoidRootPart")
-            local mhum = Mon:FindFirstChild("Humanoid")
-            if mhrp then mhrp.CanCollide = false end
-            if mhum then
-                mhum.WalkSpeed = 0
-                mhum.JumpPower = 0
             end
         end)
     end
@@ -2233,9 +2257,37 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         ["Dragon Claw"]    = "Dragon Talon",
     }
 
+    -- Estado da compra dos estilos V1 (Dark Step -> Electro -> Fishman Karate), só com Beli.
+    -- "buy"  = o próximo estilo já pode ser comprado agora
+    -- "wait" = falta dinheiro ou a mestria do estilo anterior
+    -- nil    = os 3 já estão comprados
+    function V1MeleeStatus()
+        local switchAt = (Config.Melee and Config.Melee.SwitchAtMastery) or 400
+        local V1Seq = {
+            {"Black Leg", 150000, nil},
+            {"Electro", 500000, "Black Leg"},
+            {"Fishman Karate", 750000, "Electro"},
+        }
+        for _, s in ipairs(V1Seq) do
+            if not CheckItem(s[1]) then
+                local beli = ScriptStorage.PlayerData.Beli or 0
+                local prevOk = (not s[3]) or (ScriptStorage.Melees[s[3]] or 0) >= switchAt
+                if prevOk and beli >= s[2] then return "buy" end
+                return "wait"
+            end
+        end
+        return nil
+    end
+
     FunctionsHandler.MeleesController:RegisterMethod("Refresh", function()
         if not Config.Items.AutoFullyMelees or not Config.Melee.AutoBuy then return nil end
-        if ScriptStorage.PlayerData.Level < 200 then return nil end
+        -- [REMOVIDO] limite de Level >= 200: Dark Step/Electro/Fishman só precisam de dinheiro.
+        -- Estilos V1 só com Beli: só devolve true quando o próximo já se pode comprar
+        -- (senão deixa o LevelFarm correr para ganhar o dinheiro, em vez de ficar preso aqui).
+        local v1 = V1MeleeStatus()
+        if v1 == "buy" then return true end
+        if v1 == "wait" then return nil end
+
         -- [FIXED] Bỏ "if _G.Level then return nil end" — đây là khóa VĨNH VIỄN,
         -- một khi thiếu tiền 1 lần là MeleesController tắt luôn mãi mãi vì
         -- không có chỗ nào khác set lại _G.Level = false. Bỏ hẳn cờ này,
@@ -2258,7 +2310,6 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
 
     FunctionsHandler.MeleesController:RegisterMethod("Start", function()
         if not Config.Items.AutoFullyMelees or not Config.Melee.AutoBuy then return end
-        if ScriptStorage.PlayerData.Level < 200 then return end
 
         local meleeList = {
             -- [FIXED - LỖI NỀN TẢNG] Trước đây key = "BuyBlackLeg" v.v. —
@@ -2268,10 +2319,10 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             -- BuyMelee so sánh W=="DragonClaw"/"Godhuman" (không "Buy...")
             -- nên trước đây KHÔNG BAO GIỜ khớp, luôn rơi vào nhánh generic
             -- sai. Bỏ hẳn tiền tố "Buy" khỏi key — để BuyMelee tự thêm.
-            {name = "Black Leg", key = "BlackLeg", price = {Beli = 150000}, levelReq = 300},
-            {name = "Electro", key = "Electro", price = {Beli = 500000}, levelReq = 300},
-            {name = "Fishman Karate", key = "FishmanKarate", price = {Beli = 750000}, levelReq = 300},
-            {name = "Dragon Claw", key = "DragonClaw", price = {Fragments = 1500}, levelReq = 300},
+            {name = "Black Leg", key = "BlackLeg", price = {Beli = 150000}, levelReq = nil},
+            {name = "Electro", key = "Electro", price = {Beli = 500000}, levelReq = nil, needMastery = {item = "Black Leg", value = Config.Melee.SwitchAtMastery or 400}},
+            {name = "Fishman Karate", key = "FishmanKarate", price = {Beli = 750000}, levelReq = nil, needMastery = {item = "Electro", value = Config.Melee.SwitchAtMastery or 400}},
+            {name = "Dragon Claw", key = "DragonClaw", price = {Fragments = 1500}, levelReq = nil},
             {name = "Superhuman", key = "Superhuman", price = {Beli = 3000000}, levelReq = nil, needMastery = {item = "Dragon Claw", value = 300}},
             {name = "Death Step", key = "DeathStep", price = {Beli = 2500000, Fragments = 5000}, levelReq = 400, needKey = "Library Key"},
             {name = "Sharkman Karate", key = "SharkmanKarate", price = {Beli = 2500000, Fragments = 5000}, levelReq = 400, needKey = "Water Key"},
@@ -2532,12 +2583,15 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                     SetTask('MainTask', 'Auto Full Melee | Mua ' .. melee.name)
                     local checkResult = BuyMelee(melee.key, true)  -- Bước 1: check (proxy ghi vào J nếu hợp lệ)
                     task.wait(0.3)
-                    BuyMelee(melee.key)                            -- Bước 2: mua thật (kích hoạt proxy auto-navigate + invoke thật)
+                    local buyResult = BuyMelee(melee.key)          -- Bước 2: mua thật (kích hoạt proxy auto-navigate + invoke thật)
                     task.wait(0.5)
                     if CheckItem(melee.name) then
                         SetTask('MainTask', 'Auto Full Melee | ✅ Mua thành công ' .. melee.name)
                     else
-                        SetTask('SubTask', 'Auto Full Melee | Đã gửi lệnh mua ' .. melee.name .. ' — kiểm tra lại vòng sau')
+                        -- [DIAGNÓSTICO] mostra o que o servidor respondeu à compra
+                        SetTask('SubTask', 'Compra ' .. melee.name .. ' | check=' .. tostring(checkResult) .. ' | compra=' .. tostring(buyResult) .. ' | Beli=' .. tostring(ScriptStorage.PlayerData.Beli))
+                        print("[Melee] compra falhou:", melee.name, "check=", checkResult, "compra=", buyResult)
+                        task.wait(1)
                     end
                 else
                     -- [FIXED] Không còn set _G.Level=true (khóa vĩnh viễn) —
@@ -3339,9 +3393,12 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     -- ============================================================
     FunctionsHandler.Saber:RegisterMethod('Refresh', function()
         if not Config.Items.Saber then return end
-        if ScriptStorage.Backpack.Saber then return end
+        if ScriptStorage.Backpack.Saber or CheckItem("Saber") then return end
         if ScriptStorage.PlayerData.Level < 200 then return end
+        if SeaIndex ~= 1 then return end -- a quest do Saber é no Sea 1 (Jungle)
+        if V1MeleeStatus and V1MeleeStatus() == "buy" then return end -- primeiro compra o estilo (Dark Step...) quando já há dinheiro
         local X = Remotes.CommF_:InvokeServer('ProQuestProgress')
+        if type(X) ~= "table" or type(X.Plates) ~= "table" then return end
         local h
         for w, w in X.Plates do if w == false then h = 1 end end
         if not h then
@@ -3369,13 +3426,13 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
 
     FunctionsHandler.Saber:RegisterMethod('Start', function()
         local h, X = FunctionsHandler.Saber:Get("CurrentProgressLevel"), FunctionsHandler.Saber:Get('LastestRefreshSenque')
-        if not h then
-            FunctionsHandler.Saber.Methods.Refresh:Call()
-            return FunctionsHandler.Saber.Methods.Start:Call()
-        elseif h == 0 then
-        elseif os.time() - X > 60 then
-            FunctionsHandler.Saber.Methods.Refresh:Call()
-            return FunctionsHandler.Saber.Methods.Start:Call()
+        -- [FIXED] antes: se o progresso ficava nil (ex.: Saber Expert ainda não apareceu) o Start
+        -- chamava Refresh -> Start -> Refresh... em recursão infinita. Agora refresca 1 vez e sai.
+        if not h or os.time() - (X or 0) > 60 then
+            h = FunctionsHandler.Saber.Methods.Refresh:Call()
+            if not h then return end
+        end
+        if h == 0 then
         else
             if h == 1 then
                 local X = FunctionsHandler.Saber.Methods.GetQuestplates:Call()
@@ -3760,12 +3817,47 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         return true -- 1.8s liên tục không thấy sống lại — chắc chắn chết
     end
 
+    -- ============================================================
+    -- BossNeeded(nome): só devolve true se o script realmente precisa do boss
+    -- (drop/chave/progresso que ainda não tem). Bosses sem uso conhecido no
+    -- script ficam de fora, a não ser que estejam em Config.BossAlwaysKill.
+    -- ============================================================
+    local function _hasItem(n)
+        return (CheckItem(n) and true) or (ScriptStorage.Backpack and ScriptStorage.Backpack[n] and true) or false
+    end
+    function BossNeeded(name)
+        if Config.BossOnlyIfNeeded == false then return true end
+        if Config.BossAlwaysKill and Config.BossAlwaysKill[name] then return true end
+        local items = Config.Items or {}
+        if name == "Awakened Ice Admiral" then
+            -- Library Key (Death Step) ou Rengoku
+            return (items.AutoFullyMelees and not _hasItem("Death Step"))
+                or (Config.Sword and Config.Sword["Rengoku"] and not _hasItem("Rengoku")) or false
+        elseif name == "Tide Keeper" then
+            -- Water Key (Sharkman Karate)
+            return (items.AutoFullyMelees and not _hasItem("Sharkman Karate")) or false
+        elseif name == "Deandre" or name == "Urban" or name == "Diablo" then
+            -- Elite Hunter -> progresso do Yama
+            return (items.CursedDualKatana and not _hasItem("Yama")) or false
+        elseif name == "Soul Reaper" then
+            return not _hasItem("Hallow Scythe")
+        elseif name == "Darkbeard" then
+            -- Dark Fragment (Soul Guitar / sair do Sea 2)
+            local want = items.SoulGuitar or (Config.Settings and Config.Settings.StayInSea2UntilHaveDarkFragments)
+            return (want and not _hasItem("Dark Fragment") and not _hasItem("Skull Guitar")) or false
+        elseif name == "Don Swan" then
+            local ok, done = pcall(function() return Storage:Get("SwanDefeated") end)
+            return not (ok and done)
+        end
+        return false
+    end
+
     FunctionsHandler.BossesTask:RegisterMethod("Refresh", function()
         local k
         for h, h in BossesOrder do
             -- [FIXED] Thêm gate Config.BossWeapons — trước đây không có cách
             -- nào tắt farm 1 boss cụ thể, giờ set Config.BossWeapons[name]=false là bỏ qua
-            if Config.BossWeapons[h] ~= false then
+            if Config.BossWeapons[h] ~= false and BossNeeded(h) then
                 local X = BossesOrderLevel[h]
                 if ScriptStorage.PlayerData.Level >= X then
                     local X = ScriptStorage.Enemies[h]
@@ -3792,12 +3884,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 if k.Parent == nil or (k:FindFirstChild("Humanoid") and k.Humanoid.Health <= 0) then
                     -- [FIXED] Xác nhận chết thật trước khi reset (tránh false-positive lúc chuyển phase)
                     if ConfirmBossDead(k.Name) then
-                        SetTask('SubTask', '✅ Đã hạ ' .. k.Name .. ' — reset về farm level')
-                        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                        if hum then
-                            hum.Health = 0
-                            LocalPlayer.CharacterAdded:Wait()
-                        end
+                        SetTask('SubTask', '✅ Đã hạ ' .. k.Name .. ' — tiếp tục')
                     else
                         SetTask('SubTask', k.Name .. ' đang chuyển phase — tiếp tục đánh')
                     end
@@ -3813,7 +3900,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         local k
         for h, X in SpecialBossesOrder do
             -- [FIXED] Cùng gate Config.BossWeapons như BossesTask
-            if Config.BossWeapons[h] ~= false and ScriptStorage.PlayerData.Level >= X then
+            if Config.BossWeapons[h] ~= false and BossNeeded(h) and ScriptStorage.PlayerData.Level >= X then
                 local X = ScriptStorage.Enemies[h]
                 if X and X:FindFirstChild('Humanoid') and X.Humanoid.Health > 0 then k = X end
             end
@@ -3848,12 +3935,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 if k.Parent == nil or (k:FindFirstChild("Humanoid") and k.Humanoid.Health <= 0) then
                     -- [FIXED] Xác nhận chết thật trước khi reset (tránh false-positive lúc chuyển phase)
                     if ConfirmBossDead(k.Name) then
-                        SetTask('SubTask', '✅ Đã hạ ' .. k.Name .. ' — reset về farm level')
-                        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                        if hum then
-                            hum.Health = 0
-                            LocalPlayer.CharacterAdded:Wait()
-                        end
+                        SetTask('SubTask', '✅ Đã hạ ' .. k.Name .. ' — tiếp tục')
                     else
                         SetTask('SubTask', k.Name .. ' đang chuyển phase — tiếp tục đánh')
                     end
@@ -3976,12 +4058,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         pcall(function()
             if boss.Parent == nil or (boss:FindFirstChild("Humanoid") and boss.Humanoid.Health <= 0) then
                 if ConfirmBossDead(sw.boss) then
-                    SetTask('SubTask', '✅ Đã hạ ' .. sw.boss .. ' — reset về farm level')
-                    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        hum.Health = 0
-                        LocalPlayer.CharacterAdded:Wait()
-                    end
+                    SetTask('SubTask', '✅ Đã hạ ' .. sw.boss .. ' — tiếp tục')
                 else
                     SetTask('SubTask', sw.boss .. ' đang chuyển phase — tiếp tục đánh')
                 end
@@ -4087,12 +4164,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                         -- [FIXED] Đây chính xác là case boss man báo — Cake Prince
                         -- ("Hải Tặc Đào Hoa") chuyển phase 2, code cũ tưởng chết
                         if ConfirmBossDead("Cake Prince") then
-                            SetTask('SubTask', '✅ Đã hạ Cake Prince — reset về farm level')
-                            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                            if hum then
-                                hum.Health = 0
-                                LocalPlayer.CharacterAdded:Wait()
-                            end
+                            SetTask('SubTask', '✅ Đã hạ Cake Prince — tiếp tục')
                         else
                             SetTask('SubTask', 'Cake Prince đang chuyển phase — tiếp tục đánh')
                         end
