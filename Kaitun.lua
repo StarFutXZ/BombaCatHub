@@ -2362,6 +2362,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             if not force and V1MeleeStatus() ~= "buy" then return true end -- Beli baixou: cancela
         end
         if CaculateDistance(cf) > 8 then
+            V1Show('[V1] Não consegui chegar ao professor de ' .. target .. ' | distância=' .. tostring(math.floor(CaculateDistance(cf))))
             SetTask('SubTask', 'Não consegui chegar ao professor de ' .. target .. ' — volto a tentar em 20s')
             print("[Melee] não chegou ao professor de", target, "distância:", CaculateDistance(cf))
             V1BuyCooldownUntil = os.time() + 20
@@ -2377,6 +2378,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             SetTask('MainTask', 'Auto Full Melee | ✅ Comprou ' .. target)
             print("[Melee] comprou", target)
         else
+            V1Show('[V1] Compra ' .. target .. ' falhou | check=' .. tostring(checkOk) .. ' | compra=' .. tostring(buyRes) .. ' | Beli=' .. tostring(V1Beli()))
             SetTask('SubTask', 'Compra ' .. target .. ' falhou | check=' .. tostring(checkOk) .. ' | compra=' .. tostring(buyRes) .. ' | Beli=' .. tostring(V1Beli()))
             print("[Melee] compra falhou:", target, "check=", checkOk, "compra=", buyRes, "Beli=", V1Beli())
             V1BuyCooldownUntil = os.time() + 20
@@ -2390,26 +2392,56 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         return V1DoBuy("Black Leg", true)
     end
 
-    function V1BuyOverride()
-        if not (Config.Items and Config.Items.AutoFullyMelees and Config.Melee and Config.Melee.AutoBuy) then return false end
-
-        -- diagnóstico a cada 3s: mostra o que o script está a ver
-        if Config.Melee.Debug ~= false and os.clock() - V1DiagAt > 3 then
-            V1DiagAt = os.clock()
-            local st = V1MeleeStatus()
-            print(string.format("[V1] build=%s | estado=%s | Beli=%s | tem Black Leg=%s | Sea=%s | cooldown=%s",
-                V1_BUILD, tostring(st), tostring(V1Beli()), tostring(CheckItem("Black Leg") and true or false),
-                tostring(SeaIndex), tostring(math.max(0, V1BuyCooldownUntil - os.time()))))
-            if st == "wait" then
-                SetTask('SubTask', 'Estilo V1: a juntar Beli (' .. tostring(V1Beli()) .. ') / ou a aguardar mestria do anterior')
+    -- Texto SEMPRE visível no ecrã (útil no telemóvel, onde não há consola):
+    -- mostra o que o script está a ver para a compra do Dark Step.
+    local V1DiagLabel
+    function V1Show(txt)
+        pcall(function()
+            if not V1DiagLabel or not V1DiagLabel.Parent then
+                local g = Instance.new("ScreenGui")
+                g.Name = "KaitunV1Diag"
+                g.ResetOnSpawn = false
+                g.DisplayOrder = 99
+                g.Parent = game:GetService("CoreGui")
+                local l = Instance.new("TextLabel")
+                l.Size = UDim2.new(1, 0, 0, 20)
+                l.Position = UDim2.new(0, 0, 0, 0)
+                l.BackgroundColor3 = Color3.new(0, 0, 0)
+                l.BackgroundTransparency = 0.4
+                l.TextColor3 = Color3.fromRGB(255, 255, 0)
+                l.TextSize = 13
+                l.Font = Enum.Font.SourceSansBold
+                l.TextXAlignment = Enum.TextXAlignment.Left
+                l.Parent = g
+                V1DiagLabel = l
             end
+            V1DiagLabel.Text = " " .. txt
+        end)
+    end
+
+    function V1BuyOverride()
+        if not (Config.Items and Config.Items.AutoFullyMelees and Config.Melee and Config.Melee.AutoBuy) then
+            V1Show("[V1 " .. V1_BUILD .. "] desligado na config (AutoFullyMelees/AutoBuy)")
+            return false
         end
 
-        if os.time() < V1BuyCooldownUntil then return false end
+        local st = V1MeleeStatus()
+        local reason
+        local cd = V1BuyCooldownUntil - os.time()
         local char = LocalPlayer.Character
         local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not hum or hum.Health <= 0 then return false end
-        if V1MeleeStatus() ~= "buy" then return false end
+        if cd > 0 then reason = "cooldown " .. cd .. "s (a última tentativa falhou)"
+        elseif not hum or hum.Health <= 0 then reason = "personagem morto"
+        elseif st ~= "buy" then reason = "ainda não pode comprar (estado=" .. tostring(st) .. ")"
+        end
+
+        if Config.Melee.Debug ~= false and os.clock() - V1DiagAt > 1 then
+            V1DiagAt = os.clock()
+            V1Show(string.format("[V1 %s] estado=%s | Beli=%s | Black Leg=%s | Sea=%s | %s",
+                V1_BUILD, tostring(st), tostring(V1Beli()), tostring(CheckItem("Black Leg") and true or false),
+                tostring(SeaIndex), reason or "A COMPRAR"))
+        end
+        if reason then return false end
 
         local target
         for _, n in ipairs({"Black Leg", "Electro", "Fishman Karate"}) do
@@ -5873,7 +5905,10 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         if ParsingTimes > 100 and V1BuyOverride then
             local okO, tookOver = pcall(V1BuyOverride)
             if okO and tookOver then return end
-            if not okO then print("[ Error ] V1BuyOverride:", tookOver) end
+            if not okO then
+                print("[ Error ] V1BuyOverride:", tookOver)
+                if V1Show then V1Show("[V1] ERRO: " .. tostring(tookOver)) end
+            end
         end
         for W, W in TasksOrder do
             local h = FunctionsHandler[W]
