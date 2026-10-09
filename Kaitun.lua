@@ -818,54 +818,81 @@ function hoangtuveu()
         props = props or {}
         props.Name = name; props.Text = text; props.TextSize = size
         props.TextColor3 = color; props.Font = font or Enum.Font.Gotham
-        props.BackgroundTransparency = 1; props.TextXAlignment = props.TextXAlignment or Enum.TextXAlignment.Left
+        props.BackgroundTransparency = 1
+        props.TextXAlignment = props.TextXAlignment or Enum.TextXAlignment.Left
+        props.TextYAlignment = props.TextYAlignment or Enum.TextYAlignment.Center
         return make("TextLabel", props, parent)
     end
-    local gold = Color3.fromRGB(213, 176, 83)
-    local white = Color3.fromRGB(238, 240, 246)
-    local muted = Color3.fromRGB(155, 164, 181)
-    local cardColor = Color3.fromRGB(15, 20, 32)
 
-    local panel = make("Frame", {Name="MainPanel", AnchorPoint=Vector2.new(0.5,0.5), Position=UDim2.new(0.5,0,0.5,0), Size=UDim2.new(0,390,0,292), BackgroundColor3=Color3.fromRGB(9,13,23), BorderSizePixel=0}, gui)
-    corner(panel, 15)
-    make("UIStroke", {Color=gold, Thickness=1.4, Transparency=0.08}, panel)
-    make("UIPadding", {PaddingTop=UDim.new(0,10),PaddingBottom=UDim.new(0,10),PaddingLeft=UDim.new(0,10),PaddingRight=UDim.new(0,10)}, panel)
-    local rootLayout = make("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,7), FillDirection=Enum.FillDirection.Vertical}, panel)
+    local gold = Color3.fromRGB(215, 181, 91)
+    local white = Color3.fromRGB(232, 235, 243)
+    local muted = Color3.fromRGB(151, 160, 178)
+    local panelColor = Color3.fromRGB(7, 11, 20)
+    local cardColor = Color3.fromRGB(14, 19, 31)
+    local green = Color3.fromRGB(105, 220, 164)
 
-    local header = make("Frame", {Name="Header", LayoutOrder=1, Size=UDim2.new(1,0,0,25), BackgroundTransparency=1}, panel)
-    label(header,"HubTitle","BOMBCAT HUB",14,gold,Enum.Font.GothamBold,{Size=UDim2.new(0.63,0,1,0),Position=UDim2.new(0,0,0,0)})
-    local active = make("TextLabel", {Name="ActiveBadge",Text="● ACTIVE",TextSize=10,Font=Enum.Font.GothamBold,TextColor3=Color3.fromRGB(121,225,168),BackgroundColor3=Color3.fromRGB(23,52,43),BorderSizePixel=0,Size=UDim2.new(0,67,0,20),Position=UDim2.new(1,-67,0,2)}, header)
-    corner(active,10)
-    local separator = make("Frame", {LayoutOrder=2,Size=UDim2.new(1,0,0,1),BackgroundColor3=Color3.fromRGB(49,53,63),BorderSizePixel=0},panel)
+    -- Compact centered layout matching the supplied reference image.
+    local panel = make("Frame", {Name="MainPanel", AnchorPoint=Vector2.new(0.5,0.5), Position=UDim2.new(0.5,0,0.5,0), Size=UDim2.new(0,394,0,292), BackgroundColor3=panelColor, BorderSizePixel=0}, gui)
+    corner(panel, 16)
+    make("UIStroke", {Color=gold, Thickness=1.6, Transparency=0.04}, panel)
+    make("UIPadding", {PaddingTop=UDim.new(0,9),PaddingBottom=UDim.new(0,9),PaddingLeft=UDim.new(0,10),PaddingRight=UDim.new(0,10)}, panel)
+    make("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,6), FillDirection=Enum.FillDirection.Vertical}, panel)
 
-    local taskCard = make("Frame", {Name="MissionControl",LayoutOrder=3,Size=UDim2.new(1,0,0,82),BackgroundColor3=cardColor,BorderSizePixel=0},panel); corner(taskCard,9)
-    make("UIPadding",{PaddingTop=UDim.new(0,8),PaddingBottom=UDim.new(0,6),PaddingLeft=UDim.new(0,9),PaddingRight=UDim.new(0,9)},taskCard)
-    label(taskCard,"MissionTitle","◉  MISSION CONTROL",10,gold,Enum.Font.GothamBold,{Size=UDim2.new(1,0,0,14),Position=UDim2.new(0,0,0,0)})
-    local taskLabel = label(taskCard,"Task","Level Farming | Loading quest...",11,white,Enum.Font.Gotham,{Size=UDim2.new(1,0,0,29),Position=UDim2.new(0,0,0,19),TextWrapped=true})
-    local subTaskLabel = label(taskCard,"SubTask","Preparing next task...",10,muted,Enum.Font.Gotham,{Size=UDim2.new(1,0,0,23),Position=UDim2.new(0,0,0,49),TextWrapped=true})
+    local header = make("Frame", {Name="Header", LayoutOrder=1, Size=UDim2.new(1,0,0,22), BackgroundTransparency=1}, panel)
+    label(header,"HubTitle","BOMBCAT HUB",13,gold,Enum.Font.GothamBold,{Size=UDim2.new(0.64,0,1,0),Position=UDim2.new(0,0,0,0)})
+    local active = make("TextLabel", {Name="ActiveBadge",Text="● ACTIVE",TextSize=9,Font=Enum.Font.GothamBold,TextColor3=green,BackgroundColor3=Color3.fromRGB(20,48,40),BorderSizePixel=0,Size=UDim2.new(0,62,0,19),Position=UDim2.new(1,-62,0,1)}, header)
+    corner(active,12)
+    make("Frame", {Name="HeaderDivider",LayoutOrder=2,Size=UDim2.new(1,0,0,1),BackgroundColor3=Color3.fromRGB(49,54,66),BorderSizePixel=0},panel)
 
-    local auxCard = make("Frame",{Name="AuxiliaryTask",LayoutOrder=4,Size=UDim2.new(1,0,0,38),BackgroundColor3=cardColor,BorderSizePixel=0},panel); corner(auxCard,8)
-    label(auxCard,"AuxTitle","◉  AUXILIARY TASK",9,gold,Enum.Font.GothamBold,{Size=UDim2.new(1,-12,0,13),Position=UDim2.new(0,8,0,4)})
-    local auxValue = label(auxCard,"AuxValue","Farming until enough mastery for Electro",10,white,Enum.Font.Gotham,{Size=UDim2.new(1,-12,0,14),Position=UDim2.new(0,8,0,19)})
+    local profile = make("Frame", {Name="PlayerSession",LayoutOrder=3,Size=UDim2.new(1,0,0,26),BackgroundColor3=cardColor,BorderSizePixel=0},panel); corner(profile,7)
+    local avatar = make("ImageLabel", {Name="PlayerAvatar",BackgroundColor3=Color3.fromRGB(33,39,53),BorderSizePixel=0,Position=UDim2.new(0,4,0,3),Size=UDim2.new(0,20,0,20),Image=""},profile); corner(avatar,10)
+    label(profile,"PlayerName",game:GetService("Players").LocalPlayer.DisplayName,8,white,Enum.Font.GothamBold,{Position=UDim2.new(0,29,0,0),Size=UDim2.new(0.34,0,1,0),TextTruncate=Enum.TextTruncate.AtEnd})
+    local sessionLabel = label(profile,"SessionTime","0hrs, 0min, 0sec  |  Total: 0day, 0hrs, 0min, 0sec",7,gold,Enum.Font.GothamBold,{Position=UDim2.new(0.35,0,0,0),Size=UDim2.new(0.64,-5,1,0),TextXAlignment=Enum.TextXAlignment.Right,TextTruncate=Enum.TextTruncate.AtEnd})
+    task.spawn(function()
+        pcall(function()
+            local image = game:GetService("Players"):GetUserThumbnailAsync(game:GetService("Players").LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+            avatar.Image = image
+        end)
+    end)
+    local sessionStart = tick()
+    task.spawn(function()
+        while gui.Parent do
+            local elapsed = math.floor(tick()-sessionStart)
+            local hours = math.floor(elapsed/3600); local minutes = math.floor((elapsed%3600)/60); local seconds = elapsed%60
+            sessionLabel.Text = string.format("%dhrs, %dmin, %dsec  |  Total: 0day, 0hrs, %dmin, %dsec",hours,minutes,seconds,math.floor(elapsed/60),seconds)
+            task.wait(1)
+        end
+    end)
 
-    local engineCard = make("Frame",{Name="EngineController",LayoutOrder=5,Size=UDim2.new(1,0,0,34),BackgroundColor3=cardColor,BorderSizePixel=0},panel); corner(engineCard,8)
-    label(engineCard,"EngineTitle","◉  ENGINE CONTROLLER",9,gold,Enum.Font.GothamBold,{Size=UDim2.new(1,-12,0,12),Position=UDim2.new(0,8,0,3)})
-    local engineValue = label(engineCard,"EngineValue","LevelFarm",10,white,Enum.Font.Gotham,{Size=UDim2.new(1,-12,0,13),Position=UDim2.new(0,8,0,17)})
+    local middle = make("Frame", {Name="MainSections",LayoutOrder=4,Size=UDim2.new(1,0,0,102),BackgroundTransparency=1},panel)
+    local mission = make("Frame", {Name="MissionControl",Position=UDim2.new(0,0,0,0),Size=UDim2.new(0.59,-3,1,0),BackgroundColor3=cardColor,BorderSizePixel=0},middle); corner(mission,9)
+    make("UIPadding",{PaddingTop=UDim.new(0,7),PaddingLeft=UDim.new(0,8),PaddingRight=UDim.new(0,7)},mission)
+    label(mission,"MissionTitle","◉  MISSION CONTROL",9,gold,Enum.Font.GothamBold,{Position=UDim2.new(0,0,0,0),Size=UDim2.new(1,0,0,14)})
+    local taskLabel = label(mission,"Task","Level Farming | Claiming Quest",8,white,Enum.Font.Gotham,{Position=UDim2.new(0,0,0,19),Size=UDim2.new(1,0,0,28),TextWrapped=true,TextYAlignment=Enum.TextYAlignment.Top})
+    local subTaskLabel = label(mission,"SubTask","SubTask: Preparing next task...",7,muted,Enum.Font.Gotham,{Position=UDim2.new(0,0,0,53),Size=UDim2.new(1,0,0,34),TextWrapped=true,TextYAlignment=Enum.TextYAlignment.Top})
 
-    local stats = make("Frame",{Name="Stats",LayoutOrder=6,Size=UDim2.new(1,0,0,47),BackgroundTransparency=1},panel)
-    local statsLayout = make("UIListLayout",{FillDirection=Enum.FillDirection.Horizontal,SortOrder=Enum.SortOrder.LayoutOrder,Padding=UDim.new(0,6)},stats)
+    local right = make("Frame", {Name="RightSections",Position=UDim2.new(0.59,3,0,0),Size=UDim2.new(0.41,-3,1,0),BackgroundTransparency=1},middle)
+    local auxCard = make("Frame",{Name="AuxiliaryTask",Position=UDim2.new(0,0,0,0),Size=UDim2.new(1,0,0,48),BackgroundColor3=cardColor,BorderSizePixel=0},right); corner(auxCard,8)
+    label(auxCard,"AuxTitle","◉  AUXILIARY TASK",7,gold,Enum.Font.GothamBold,{Position=UDim2.new(0,6,0,4),Size=UDim2.new(1,-12,0,12)})
+    local auxValue = label(auxCard,"AuxValue","Farming until enough mastery for Electro",7,white,Enum.Font.Gotham,{Position=UDim2.new(0,6,0,17),Size=UDim2.new(1,-12,0,27),TextWrapped=true,TextYAlignment=Enum.TextYAlignment.Top})
+    local engineCard = make("Frame",{Name="EngineController",Position=UDim2.new(0,0,0,53),Size=UDim2.new(1,0,0,49),BackgroundColor3=cardColor,BorderSizePixel=0},right); corner(engineCard,8)
+    label(engineCard,"EngineTitle","◉  ENGINE CONTROLLER",7,green,Enum.Font.GothamBold,{Position=UDim2.new(0,6,0,4),Size=UDim2.new(1,-12,0,12)})
+    local engineValue = label(engineCard,"EngineValue","LevelFarm",8,white,Enum.Font.Gotham,{Position=UDim2.new(0,6,0,18),Size=UDim2.new(1,-12,0,20)})
+
+    local stats = make("Frame",{Name="Stats",LayoutOrder=5,Size=UDim2.new(1,0,0,43),BackgroundTransparency=1},panel)
+    make("UIListLayout",{FillDirection=Enum.FillDirection.Horizontal,SortOrder=Enum.SortOrder.LayoutOrder,Padding=UDim.new(0,5)},stats)
     local function statCard(name,titleText,valueText,order)
         local card=make("Frame",{Name=name,LayoutOrder=order,Size=UDim2.new(1/3,-4,1,0),BackgroundColor3=cardColor,BorderSizePixel=0},stats); corner(card,8)
-        label(card,name.."Title",titleText,9,gold,Enum.Font.GothamBold,{Size=UDim2.new(1,-10,0,13),Position=UDim2.new(0,7,0,5)})
-        return label(card,name.."Value",valueText,13,white,Enum.Font.GothamBold,{Size=UDim2.new(1,-10,0,18),Position=UDim2.new(0,7,0,22)})
+        label(card,name.."Title",titleText,7,gold,Enum.Font.GothamBold,{Position=UDim2.new(0,6,0,4),Size=UDim2.new(1,-10,0,12),TextTruncate=Enum.TextTruncate.AtEnd})
+        return label(card,name.."Value",valueText,11,white,Enum.Font.GothamBold,{Position=UDim2.new(0,6,0,19),Size=UDim2.new(1,-10,0,18),TextTruncate=Enum.TextTruncate.AtEnd})
     end
-    local levelValue=statCard("PlayerLevel","♧  PLAYER LEVEL","--",1)
-    local beliValue=statCard("Beli","◈  BELI / WEALTH","$ --",2)
-    local fragmentsValue=statCard("Fragments","✧  FRAGMENTS","--",3)
+    local levelValue=statCard("PlayerLevel","♧ PLAYER LEVEL","--",1)
+    local beliValue=statCard("Beli","◈ BELI/WEALTH","$ --",2)
+    local fragmentsValue=statCard("Fragments","✧ FRAGMENTS","--",3)
 
-    local masteryCard=make("Frame",{Name="CombatMastery",LayoutOrder=7,Size=UDim2.new(1,0,0,39),BackgroundColor3=cardColor,BorderSizePixel=0},panel); corner(masteryCard,8)
-    label(masteryCard,"MasteryTitle","◉  COMBAT MASTERY / ARSENAL",9,gold,Enum.Font.GothamBold,{Size=UDim2.new(1,-14,0,13),Position=UDim2.new(0,8,0,4)})
-    local masteryValue=label(masteryCard,"MasteryValue","Current weapon/style: --",11,white,Enum.Font.Gotham,{Size=UDim2.new(1,-14,0,15),Position=UDim2.new(0,8,0,20)})
+    local masteryCard=make("Frame",{Name="CombatMastery",LayoutOrder=6,Size=UDim2.new(1,0,0,39),BackgroundColor3=cardColor,BorderSizePixel=0},panel); corner(masteryCard,8)
+    label(masteryCard,"MasteryTitle","◉  COMBAT MASTERY / ARSENAL",8,Color3.fromRGB(182,112,255),Enum.Font.GothamBold,{Position=UDim2.new(0,7,0,3),Size=UDim2.new(1,-14,0,12)})
+    local masteryValue=label(masteryCard,"MasteryValue","Current weapon/style: --",9,white,Enum.Font.Gotham,{Position=UDim2.new(0,7,0,17),Size=UDim2.new(1,-14,0,17),TextTruncate=Enum.TextTruncate.AtEnd})
 
     W.Instances['Task1'] = taskLabel
     W.Instances['Task2'] = subTaskLabel
@@ -878,27 +905,29 @@ function hoangtuveu()
         task.spawn(function()
             local target = W.Instances[key]
             if not target then return end
+            text = tostring(text)
             if target.Text == text then return end
             local ts = game:GetService("TweenService")
-            local fadeOut = ts:Create(target,TweenInfo.new(0.15,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{TextTransparency=1})
+            local fadeOut = ts:Create(target,TweenInfo.new(0.12,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{TextTransparency=1})
             fadeOut:Play(); fadeOut.Completed:Wait()
-            target.Text = tostring(text)
-            ts:Create(target,TweenInfo.new(0.18,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{TextTransparency=0}):Play()
+            target.Text = text
+            ts:Create(target,TweenInfo.new(0.15,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{TextTransparency=0}):Play()
         end)
     end
     task.spawn(function()
         while gui.Parent do
             pcall(function()
-                local data = LocalPlayer:FindFirstChild("Data")
+                local data = game:GetService("Players").LocalPlayer:FindFirstChild("Data")
                 local level = data and data:FindFirstChild("Level")
                 local beli = data and data:FindFirstChild("Beli")
                 local frags = data and data:FindFirstChild("Fragments")
                 levelValue.Text = level and tostring(level.Value) or "--"
                 beliValue.Text = beli and ("$ " .. tostring(beli.Value)) or "$ --"
                 fragmentsValue.Text = frags and tostring(frags.Value) or "--"
-                local character = LocalPlayer.Character
+                local player = game:GetService("Players").LocalPlayer
+                local character = player.Character
                 local tool = character and character:FindFirstChildOfClass("Tool")
-                if not tool then tool = LocalPlayer.Backpack and LocalPlayer.Backpack:FindFirstChildOfClass("Tool") end
+                if not tool and player:FindFirstChild("Backpack") then tool = player.Backpack:FindFirstChildOfClass("Tool") end
                 local mastery = tool and tool:FindFirstChild("Level")
                 masteryValue.Text = tool and (tool.Name .. ": " .. (mastery and tostring(mastery.Value) or "--")) or "Current weapon/style: --"
             end)
