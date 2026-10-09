@@ -1709,34 +1709,47 @@ end
             end
         end
     end)
-    task.spawn(function()
-        local a = game.Players.LocalPlayer
-        local RunService = game:GetService("RunService")
-        repeat RunService.Heartbeat:Wait() until a.Character and a.Character:FindFirstChild("HumanoidRootPart")
-        local lastFarmState = nil
-
-        while true do
-            RunService.Heartbeat:Wait()
-            pcall(function()
-                local farming = getgenv().OnFarm == true
-                local character = a.Character
-                local root = character and character:FindFirstChild("HumanoidRootPart")
-
-                -- IMPORTANTE: não reposicionar o bloco para a personagem quando
-                -- estão a mais de 250 studs. Isso cancelava o progresso do tween
-                -- a cada frame e provocava engasgos, sobretudo em viagens longas.
-                if farming and block and block.Parent == workspace and root then
-                    root.CFrame = block.CFrame
-                end
-
-                -- Atualizar colisões apenas quando o estado muda, não em todos os frames.
-                if character and farming ~= lastFarmState then
-                    for _, part in ipairs(character:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            part.CanCollide = not farming
-                        end
+    -- Guardar as colisões originais para restaurá-las corretamente no fim do voo.
+    local flightCollisionState = setmetatable({}, {__mode = "k"})
+    local lastFlightCharacter = nil
+    local lastFarmState = false
+    local function SetFlightCollision(character, flying)
+        if not character then return end
+        if flying then
+            for _, part in ipairs(character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    if flightCollisionState[part] == nil then
+                        flightCollisionState[part] = part.CanCollide
                     end
-                    lastFarmState = farming
+                    part.CanCollide = false
+                end
+            end
+        else
+            for part, originalValue in pairs(flightCollisionState) do
+                if part and part.Parent then part.CanCollide = originalValue end
+                flightCollisionState[part] = nil
+            end
+        end
+    end
+
+    task.spawn(function()
+        local player = game.Players.LocalPlayer
+        local RunService = game:GetService("RunService")
+        while true do
+            RunService.PreSimulation:Wait()
+            pcall(function()
+                local character = player.Character
+                local root = character and character:FindFirstChild("HumanoidRootPart")
+                local flying = getgenv().OnFarm == true and block and block.Parent == workspace and root ~= nil
+                if character ~= lastFlightCharacter then
+                    SetFlightCollision(lastFlightCharacter, false)
+                    lastFlightCharacter = character
+                    lastFarmState = false
+                end
+                if flying and root then root.CFrame = block.CFrame end
+                if character and flying ~= lastFarmState then
+                    SetFlightCollision(character, flying)
+                    lastFarmState = flying
                 end
             end)
         end
@@ -1807,12 +1820,12 @@ end
     -- _SgCollectChest, đã được thay bằng tween thường ở trên).
 
     -- ============================================================
-    -- [FIXED] TWEEN CONTROLLER - GIỮ NGUYÊN 200/190
+    -- [FIXED] TWEEN CONTROLLER - movimento contínuo e colisões restauradas
     -- ============================================================
+    local activeTweenTarget = nil
     function TweenController.Create(W)
         if not W or TweenDebounce then return end
         local a = typeof(W) ~= 'CFrame' and ConvertTo(CFrame, W) or W
-        if TweenInstance then pcall(function() TweenInstance:Cancel() end) end
         local character = game.Players.LocalPlayer.Character
         local hrp = character and character:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
@@ -1821,9 +1834,6 @@ end
         -- nhánh BypassTP (dist>=4000 → đổi spawn point) — không còn dùng
         -- cơ chế bypass qua spawn point nữa, mọi khoảng cách đều tween bình
         -- thường qua block (từ main_red_magic_beta.txt).
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = false end
-        end
         local head = character:WaitForChild("Head")
         if not head:FindFirstChild("eltrul") then
             local bv = Instance.new('BodyVelocity')
@@ -1850,36 +1860,45 @@ end
         end
 
         a = CFrame.new(a.Position)
-        -- Garantir que cada tween começa na posição atual da personagem.
-        -- Evita que um tween novo herde a posição final/antiga do bloco.
-        block.CFrame = hrp.CFrame
-        local dist = CaculateDistance(hrp.CFrame, a)
+        local target = a
+        local activeTween = TweenInstance
+        local distToTarget = CaculateDistance(hrp.CFrame, target)
 
-        if dist <= 5 then
-            hrp.CFrame = a
-            block.CFrame = a
+        if distToTarget <= 5 then
+            if activeTween then pcall(function() activeTween:Cancel() end) end
+            shouldTween = false
+            activeTweenTarget = nil
+            hrp.CFrame = target
+            block.CFrame = target
             return
         end
 
-        -- O tempo do tween é distância / divisor; divisor maior significa viagem mais rápida.
-        local divisor = 230
-        local duration = dist / divisor
-
-        -- [FIXED - port tween từ main_red_magic_beta.txt] Tween "block"
-        -- (Part vô hình) thay vì tween thẳng hrp — nhân vật tự bám theo
-        -- block qua vòng lặp sync đã thêm ở trên (getgenv().OnFarm).
-        shouldTween = true
-        TweenInstance = Services.TweenService:Create(block, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = a})
-        TweenInstance:Play()
-        task.spawn(function()
-            while TweenInstance and TweenInstance.PlaybackState == Enum.PlaybackState.Playing do
-                if not shouldTween then
-                    pcall(function() TweenInstance:Cancel() end)
-                    break
-                end
-                task.wait(0.1)
+        -- Evitar reiniciar o voo continuamente quando o farming pede quase
+        -- sempre o mesmo destino. Reiniciar tweens era a causa dos solavancos.
+        if activeTween and activeTween.PlaybackState == Enum.PlaybackState.Playing then
+            local oldTarget = activeTweenTarget
+            if oldTarget and (oldTarget.Position - target.Position).Magnitude < 8 then
+                return
             end
-            shouldTween = false
+            pcall(function() activeTween:Cancel() end)
+        else
+            block.CFrame = hrp.CFrame
+        end
+
+        local dist = CaculateDistance(block.CFrame, target)
+        local divisor = 230
+        local duration = math.max(dist / divisor, 0.08)
+        shouldTween = true
+        activeTweenTarget = target
+        local thisTween = Services.TweenService:Create(block, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = target})
+        TweenInstance = thisTween
+        thisTween:Play()
+        task.spawn(function()
+            thisTween.Completed:Wait()
+            if TweenInstance == thisTween then
+                shouldTween = false
+                activeTweenTarget = nil
+            end
         end)
     end
 
