@@ -47,9 +47,9 @@ Config = {
         GodhumanAtV2Mastery  = 400,
     },
     AutoKen = true,
-    BringMobs = false,
+    BringMobs = true,
     PanicMode = {
-        Enabled          = true,
+        Enabled          = false,
         LowHealthPercent = 20,
         SafeHealthPercent = 75,
         EscapeHeight     = 2000,
@@ -1862,7 +1862,7 @@ end
         -- quá 160"] Bỏ hẳn bảng 110/100 cũ — dùng 1 mức tốc độ CỐ ĐỊNH 160
         -- (giống tween của main_red_magic_beta.txt, chỉ đổi số chia 300 →
         -- 160 để nhanh hơn), không có mức nào vượt quá con số này.
-        local divisor = 160
+        local divisor = 190 -- velocidade moderadamente maior, mantendo tween linear para reduzir solavancos
         local duration = dist / divisor
 
         -- [FIXED - port tween từ main_red_magic_beta.txt] Tween "block"
@@ -3842,21 +3842,14 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             CombatController.Attack(tostring(k), null, null, function() SpecialItems = nil end)
             SpecialItems = nil
 
-            -- [ADDED] "Reset teleport về farm level tiếp" — boss man yêu cầu:
-            -- sau khi hạ xong, reset nhân vật (respawn) để đảm bảo LevelFarm
-            -- tiếp tục sạch sẽ thay vì có thể bị kẹt vị trí/trạng thái combat
+            -- Não fazer reset/respawn depois de derrotar um boss.
+            -- Confirmar a morte apenas para atualizar o estado e deixar o ciclo normal continuar.
             pcall(function()
                 if k.Parent == nil or (k:FindFirstChild("Humanoid") and k.Humanoid.Health <= 0) then
-                    -- [FIXED] Xác nhận chết thật trước khi reset (tránh false-positive lúc chuyển phase)
                     if ConfirmBossDead(k.Name) then
-                        SetTask('SubTask', '✅ Đã hạ ' .. k.Name .. ' — reset về farm level')
-                        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                        if hum then
-                            hum.Health = 0
-                            LocalPlayer.CharacterAdded:Wait()
-                        end
+                        SetTask('SubTask', '✅ Boss derrotado: ' .. k.Name .. ' — a continuar sem reset')
                     else
-                        SetTask('SubTask', k.Name .. ' đang chuyển phase — tiếp tục đánh')
+                        SetTask('SubTask', k.Name .. ' está a mudar de fase — continuar a lutar')
                     end
                 end
             end)
@@ -3899,20 +3892,13 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             SetTask('SubTask', '👾 Special Boss: ' .. k.Name)
             CombatController.Attack(tostring(k))
 
-            -- [ADDED] Cùng logic reset như BossesTask — hạ xong Katakuri/
-            -- Core/Darkbeard thì reset về farm level bình thường
+            -- Não fazer reset/respawn depois de derrotar um boss especial.
             pcall(function()
                 if k.Parent == nil or (k:FindFirstChild("Humanoid") and k.Humanoid.Health <= 0) then
-                    -- [FIXED] Xác nhận chết thật trước khi reset (tránh false-positive lúc chuyển phase)
                     if ConfirmBossDead(k.Name) then
-                        SetTask('SubTask', '✅ Đã hạ ' .. k.Name .. ' — reset về farm level')
-                        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                        if hum then
-                            hum.Health = 0
-                            LocalPlayer.CharacterAdded:Wait()
-                        end
+                        SetTask('SubTask', '✅ Boss especial derrotado: ' .. k.Name .. ' — sem reset')
                     else
-                        SetTask('SubTask', k.Name .. ' đang chuyển phase — tiếp tục đánh')
+                        SetTask('SubTask', k.Name .. ' está a mudar de fase — continuar a lutar')
                     end
                 end
             end)
@@ -4029,18 +4015,13 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         end
         CombatController.Attack(sw.boss)
 
-        -- [ADDED] Hạ xong → reset về farm level, giống pattern các boss khác
+        -- Não fazer reset/respawn depois de derrotar o boss da tarefa.
         pcall(function()
             if boss.Parent == nil or (boss:FindFirstChild("Humanoid") and boss.Humanoid.Health <= 0) then
                 if ConfirmBossDead(sw.boss) then
-                    SetTask('SubTask', '✅ Đã hạ ' .. sw.boss .. ' — reset về farm level')
-                    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        hum.Health = 0
-                        LocalPlayer.CharacterAdded:Wait()
-                    end
+                    SetTask('SubTask', '✅ Boss derrotado: ' .. sw.boss .. ' — sem reset')
                 else
-                    SetTask('SubTask', sw.boss .. ' đang chuyển phase — tiếp tục đánh')
+                    SetTask('SubTask', sw.boss .. ' está a mudar de fase — continuar a lutar')
                 end
             end
         end)
@@ -4137,21 +4118,13 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                 TweenController.Create(boss.HumanoidRootPart.CFrame + Vector3.new(0, 30, 0))
                 CombatController.Attack("Cake Prince")
 
-                -- [ADDED] Hạ xong → reset về farm bình thường, giống pattern
-                -- BossesTask/SpecialBossesTask đã làm trước đó
+                -- Não fazer reset/respawn depois de derrotar Cake Prince.
                 pcall(function()
                     if boss.Parent == nil or boss.Humanoid.Health <= 0 then
-                        -- [FIXED] Đây chính xác là case boss man báo — Cake Prince
-                        -- ("Hải Tặc Đào Hoa") chuyển phase 2, code cũ tưởng chết
                         if ConfirmBossDead("Cake Prince") then
-                            SetTask('SubTask', '✅ Đã hạ Cake Prince — reset về farm level')
-                            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                            if hum then
-                                hum.Health = 0
-                                LocalPlayer.CharacterAdded:Wait()
-                            end
+                            SetTask('SubTask', '✅ Cake Prince derrotado — continuar sem reset')
                         else
-                            SetTask('SubTask', 'Cake Prince đang chuyển phase — tiếp tục đánh')
+                            SetTask('SubTask', 'Cake Prince está a mudar de fase — continuar a lutar')
                         end
                     end
                 end)
@@ -6158,6 +6131,8 @@ Config.Extras = {
     AutoGachaFruit   = true,   -- rola o Gacha (Random Fruit) automaticamente
     GachaInterval    = 5,      -- segundos entre cada checagem do gacha
 }
+-- Mantém a opção antiga sincronizada com a opção de gacha acima.
+Config.Items.AutoRandomFruit = Config.Extras.AutoGachaFruit
 --============================================================
 task.spawn(function()
     local Players = game:GetService("Players")
@@ -6185,11 +6160,15 @@ task.spawn(function()
     task.spawn(function()
         if not Config.Extras.AutoRedeemCodes then return end
         local REDEEM_CODES = {
+            -- Códigos de 2x EXP publicados como ativos nas listas de outubro de 2026.
+            "SUB2GAMERROBOT_EXP1", "EASTEREXP", "LIGHTNINGABUSE",
+            "Axiore", "TheGreatAce", "Sub2Fer999", "Enyu_is_Pro", "JCWK",
+            "StarcodeHEO", "MagicBUS", "KittGaming", "Sub2CaptainMaui",
+            "Sub2OfficialNoobie", "Sub2NoobMaster123", "Sub2Daigrock",
+            "StrawHatMaine", "TantaiGaming", "Bluxxy", "SUMMER_WAVE26",
+            -- Outros códigos úteis (não dão 2x EXP, mas podem ser resgatados).
             "fudd10", "fudd10_V2", "Chandler", "BIGNEWS", "KITT_RESET",
-            "Sub2UncleKizaru", "SUB2GAMERROBOT_RESET1", "Sub2Fer999", "Enyu_is_Pro",
-            "JCWK", "StarcodeHEO", "MagicBUS", "KittGaming", "Sub2CaptainMaui",
-            "Sub2OfficialNoobie", "TheGreatAce", "Sub2NoobMaster123", "Sub2Daigrock",
-            "Axiore", "StrawHatMaine", "TantaiGaming", "Bluxxy", "SUB2GAMERROBOT_EXP1",
+            "Sub2UncleKizaru", "SUB2GAMERROBOT_RESET1",
         }
         local remotes = game:GetService("ReplicatedStorage"):WaitForChild("Remotes")
         local redeem = remotes:FindFirstChild("Redeem") or remotes:WaitForChild("Redeem", 10)
@@ -6235,7 +6214,10 @@ task.spawn(function()
                 local ok, result = GachaCall("Check")
                 if ok and typeof(result) == "table" and result.RequirementsMet then
                     local ok2, r2 = GachaCall("Purchase")
-                    print(ok2 and "[Gacha] Rolado com sucesso!" or ("[Gacha] Falha: " .. tostring(r2)))
+                    print(ok2 and "[BombaCat Gacha] Compra solicitada." or ("[BombaCat Gacha] Falha: " .. tostring(r2)))
+                    task.wait(1.5) -- evita enviar pedidos de compra em sequência demasiado rápida
+                elseif not ok then
+                    warn("[BombaCat Gacha] Não foi possível verificar o gacha: " .. tostring(result))
                 end
             end
         end
