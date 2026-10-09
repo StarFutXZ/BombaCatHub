@@ -47,9 +47,9 @@ Config = {
         GodhumanAtV2Mastery  = 400,
     },
     AutoKen = true,
-    BringMobs = true,
+    BringMobs = false,
     PanicMode = {
-        Enabled          = false,
+        Enabled          = true,
         LowHealthPercent = 20,
         SafeHealthPercent = 75,
         EscapeHeight     = 2000,
@@ -840,7 +840,7 @@ function hoangtuveu()
     -- while the main dashboard is hidden and toggles the dashboard on tap.
     local island = make("TextButton", {
         Name="BombaCatIsland", AnchorPoint=Vector2.new(0.5,0),
-        Position=UDim2.new(0.5,0,0,2), Size=UDim2.new(0,320,0,34),
+        Position=UDim2.new(0.5,0,0,-28), Size=UDim2.new(0,320,0,34),
         BackgroundColor3=Color3.fromRGB(10,16,25), BackgroundTransparency=0.04,
         BorderSizePixel=0, Text="", AutoButtonColor=true, ZIndex=20
     }, gui)
