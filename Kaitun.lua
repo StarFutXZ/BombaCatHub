@@ -47,9 +47,9 @@ Config = {
         GodhumanAtV2Mastery  = 400,
     },
     AutoKen = true,
-    BringMobs = true,
+    BringMobs = false,
     PanicMode = {
-        Enabled          = false,
+        Enabled          = true,
         LowHealthPercent = 20,
         SafeHealthPercent = 75,
         EscapeHeight     = 2000,
@@ -1711,16 +1711,21 @@ end
     end)
     task.spawn(function()
         local a = game.Players.LocalPlayer
-        repeat task.wait() until a.Character and a.Character.PrimaryPart
+        local RunService = game:GetService("RunService")
+        repeat RunService.Heartbeat:Wait() until a.Character and a.Character.PrimaryPart
         block.CFrame = a.Character.PrimaryPart.CFrame
-        while task.wait() do
+        while true do
+            RunService.Heartbeat:Wait()
             pcall(function()
                 if getgenv().OnFarm then
                     if block and block.Parent == workspace then
                         local b = a.Character and a.Character.PrimaryPart
-                        if b and (b.Position - block.Position).Magnitude <= 200 then
+                        if b and (b.Position - block.Position).Magnitude <= 250 then
+                            -- Sincronizar no Heartbeat em vez de task.wait() para reduzir os solavancos.
                             b.CFrame = block.CFrame
-                        else
+                            b.AssemblyLinearVelocity = Vector3.zero
+                            b.AssemblyAngularVelocity = Vector3.zero
+                        elseif b then
                             block.CFrame = b.CFrame
                         end
                     end
@@ -1862,7 +1867,7 @@ end
         -- quá 160"] Bỏ hẳn bảng 110/100 cũ — dùng 1 mức tốc độ CỐ ĐỊNH 160
         -- (giống tween của main_red_magic_beta.txt, chỉ đổi số chia 300 →
         -- 160 để nhanh hơn), không có mức nào vượt quá con số này.
-        local divisor = 190 -- velocidade moderadamente maior, mantendo tween linear para reduzir solavancos
+        local divisor = 300 -- velocidade maior; sincronização no Heartbeat ajuda a manter o movimento fluido
         local duration = dist / divisor
 
         -- [FIXED - port tween từ main_red_magic_beta.txt] Tween "block"
@@ -6121,7 +6126,6 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     end
 end
 
-hoangtuveu()
 --============================================================
 -- [EXTRAS] NO ANIMATION + AUTO REDEEM CODES + AUTO RANDOM FRUIT (GACHA)
 -- Opções (pode editar/desligar):
@@ -6159,26 +6163,36 @@ task.spawn(function()
     -- AUTO REDEEM CODES
     task.spawn(function()
         if not Config.Extras.AutoRedeemCodes then return end
+        -- Códigos de EXP verificados em listas atualizadas em outubro de 2026.
+        -- Os códigos são de utilização única por conta; o jogo pode rejeitar
+        -- os já resgatados ou entretanto expirados.
         local REDEEM_CODES = {
-            -- Códigos de 2x EXP publicados como ativos nas listas de outubro de 2026.
             "SUB2GAMERROBOT_EXP1", "EASTEREXP", "LIGHTNINGABUSE",
             "Axiore", "TheGreatAce", "Sub2Fer999", "Enyu_is_Pro", "JCWK",
             "StarcodeHEO", "MagicBUS", "KittGaming", "Sub2CaptainMaui",
             "Sub2OfficialNoobie", "Sub2NoobMaster123", "Sub2Daigrock",
-            "StrawHatMaine", "TantaiGaming", "Bluxxy", "SUMMER_WAVE26",
-            -- Outros códigos úteis (não dão 2x EXP, mas podem ser resgatados).
+            "StrawHatMaine", "TantaiGaming", "Bluxxy",
             "fudd10", "fudd10_V2", "Chandler", "BIGNEWS", "KITT_RESET",
             "Sub2UncleKizaru", "SUB2GAMERROBOT_RESET1",
         }
+
         local remotes = game:GetService("ReplicatedStorage"):WaitForChild("Remotes")
-        local redeem = remotes:FindFirstChild("Redeem") or remotes:WaitForChild("Redeem", 10)
-        local commF = remotes:FindFirstChild("CommF_")
+        local commF = remotes:FindFirstChild("CommF_") or remotes:WaitForChild("CommF_", 10)
+        if not commF then
+            warn("[BombaCat Hub] AutoRedeem: Remote CommF_ não encontrado; códigos não enviados.")
+            return
+        end
+
         for _, code in ipairs(REDEEM_CODES) do
-            pcall(function()
-                if redeem then redeem:InvokeServer(code)
-                elseif commF then commF:InvokeServer("Redeem", code) end
+            local ok, result = pcall(function()
+                return commF:InvokeServer("Redeem", code)
             end)
-            task.wait(1)
+            if not ok then
+                warn("[BombaCat Hub] Falha ao tentar resgatar código:", code, result)
+            elseif type(result) == "string" then
+                print("[BombaCat Hub] Código", code, "->", result)
+            end
+            task.wait(0.8)
         end
     end)
 
@@ -6838,3 +6852,6 @@ task.spawn(function()
 
     getgenv().HexUI = UI
 end)
+
+-- Iniciar o loop principal apenas depois de configurar as funções extras.
+hoangtuveu()
