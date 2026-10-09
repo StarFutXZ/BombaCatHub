@@ -6322,7 +6322,26 @@ end
 getgenv().VOidAttack = getgenv().VOidAttack or {}
 local CFG = getgenv().VOidAttack
 
-CFG.Enabled          = CFG.Enabled          ~= false
+-- Limpar bloqueios locais deixados por uma execução anterior do VOID ATTACK.
+pcall(function()
+    local enemies = workspace:FindFirstChild("Enemies")
+    if enemies then
+        for _, mob in ipairs(enemies:GetChildren()) do
+            local hrp = mob:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local lock = hrp:FindFirstChild("VOidLock")
+                if lock then lock:Destroy() end
+                local gyro = hrp:FindFirstChild("VOidGyro")
+                if gyro then gyro:Destroy() end
+            end
+        end
+    end
+end)
+
+-- FIX: o VOID ATTACK concorria com o CombatController/BringMob.
+-- Fica desligado por defeito para não prender NPCs com BodyPosition/BodyGyro
+-- nem bloquear o farming normal. O ataque normal do hub continua ativo.
+CFG.Enabled          = false
 CFG.Range            = CFG.Range            or 90
 CFG.AttackPlayers    = CFG.AttackPlayers    ~= false
 CFG.AttackMobs       = CFG.AttackMobs       ~= false
@@ -6332,7 +6351,7 @@ CFG.LoopDelay        = CFG.LoopDelay        or 0.01
 CFG.MeleeDelay       = CFG.MeleeDelay       or 0.12
 CFG.UseObfuscated    = CFG.UseObfuscated    ~= false
 CFG.VisualActivate   = CFG.VisualActivate   ~= false
-CFG.Paralyze         = CFG.Paralyze         ~= false
+CFG.Paralyze         = false
 CFG.ParalyzeTick     = CFG.ParalyzeTick     or 0.01
 CFG.ResetCooldown    = CFG.ResetCooldown    ~= false
 
