@@ -32,7 +32,7 @@ function V1Show(txt)
         _V1DiagLabel.Text = " " .. txt
     end)
 end
-V1Show("[Kaitun darkstep-fix4] ficheiro novo carregado — a iniciar...")
+V1Show("[Kaitun darkstep-fix5] ficheiro novo carregado — a iniciar...")
 
 -- ============================================================
 -- DARK STEP / ELECTRO AUTO-BUY — módulo INDEPENDENTE (darkstep-fix4)
@@ -52,7 +52,7 @@ do
         local TS = game:GetService("TweenService")
         local RunService = game:GetService("RunService")
         local LP = Players.LocalPlayer
-        local BUILD = "darkstep-fix4"
+        local BUILD = "darkstep-fix5"
 
         local STYLES = {
             {name = "Black Leg", key = "BuyBlackLeg", price = 150000, teacher = "Dark Step Teacher", prev = nil,
@@ -87,7 +87,12 @@ do
         local function getBeli()
             local d = LP:FindFirstChild("Data")
             local b = d and d:FindFirstChild("Beli")
-            return b and b.Value or 0
+            if b then return b.Value or 0 end
+            local ls = LP:FindFirstChild("leaderstats")
+            local lb = ls and (ls:FindFirstChild("Beli") or ls:FindFirstChild("Money"))
+            if lb then return lb.Value or 0 end
+            local pd = ScriptStorage and ScriptStorage.PlayerData
+            return (pd and pd.Beli) or 0
         end
         local function teacherPos(st)
             local fallback = st.locs[sea()] or st.locs[1]
@@ -180,8 +185,13 @@ do
             return resultMsg
         end
 
-        repeat task.wait(1) until game:IsLoaded() and LP.Character and LP:FindFirstChild("Data") and LP.Data:FindFirstChild("Beli")
-        local busy, cooldown = false, 0
+        repeat
+            task.wait(1)
+            V1Show("[V1 " .. BUILD .. "] a esperar: jogo=" .. tostring(game:IsLoaded()) .. " personagem=" .. tostring(LP.Character ~= nil))
+        until game:IsLoaded() and LP.Character
+        V1Show("[V1 " .. BUILD .. "] módulo ativo — a vigiar o Beli")
+        local busy, cooldown, lastPrint = false, 0, 0
+        task.wait(5) -- deixa o jogo carregar os dados do jogador
         while task.wait(1) do
             local ok, err = pcall(function()
                 local st
@@ -203,6 +213,10 @@ do
                 elseif beli < st.price then reason = "Beli " .. beli .. "/" .. st.price
                 end
                 if forceNow then reason = nil end
+                if os.clock() - lastPrint > 10 then
+                    lastPrint = os.clock()
+                    print("[V1] próximo=" .. st.name .. " Beli=" .. tostring(beli) .. " preço=" .. st.price .. " -> " .. (reason or "A COMPRAR"))
+                end
                 V1Show(string.format("[V1 %s] próximo: %s | Beli=%s | Sea=%s | %s", BUILD, st.name, tostring(beli), tostring(sea()), reason or "A COMPRAR"))
                 if reason or busy then return end
 
