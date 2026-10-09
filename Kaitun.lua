@@ -1712,35 +1712,31 @@ end
     task.spawn(function()
         local a = game.Players.LocalPlayer
         local RunService = game:GetService("RunService")
-        repeat RunService.Heartbeat:Wait() until a.Character and a.Character.PrimaryPart
-        block.CFrame = a.Character.PrimaryPart.CFrame
+        repeat RunService.Heartbeat:Wait() until a.Character and a.Character:FindFirstChild("HumanoidRootPart")
+        local lastFarmState = nil
+
         while true do
             RunService.Heartbeat:Wait()
             pcall(function()
-                if getgenv().OnFarm then
-                    if block and block.Parent == workspace then
-                        local b = a.Character and a.Character.PrimaryPart
-                        if b and (b.Position - block.Position).Magnitude <= 250 then
-                            -- Seguir o tween no Heartbeat sem anular a velocidade física
-                            -- a cada frame, o que pode deixar o movimento preso/arrastado.
-                            b.CFrame = block.CFrame
-                        elseif b then
-                            block.CFrame = b.CFrame
+                local farming = getgenv().OnFarm == true
+                local character = a.Character
+                local root = character and character:FindFirstChild("HumanoidRootPart")
+
+                -- IMPORTANTE: não reposicionar o bloco para a personagem quando
+                -- estão a mais de 250 studs. Isso cancelava o progresso do tween
+                -- a cada frame e provocava engasgos, sobretudo em viagens longas.
+                if farming and block and block.Parent == workspace and root then
+                    root.CFrame = block.CFrame
+                end
+
+                -- Atualizar colisões apenas quando o estado muda, não em todos os frames.
+                if character and farming ~= lastFarmState then
+                    for _, part in ipairs(character:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = not farming
                         end
                     end
-                    local c = a.Character
-                    if c then
-                        for _, e in pairs(c:GetChildren()) do
-                            if e:IsA("BasePart") then e.CanCollide = false end
-                        end
-                    end
-                else
-                    local c = a.Character
-                    if c then
-                        for _, e in pairs(c:GetChildren()) do
-                            if e:IsA("BasePart") then e.CanCollide = true end
-                        end
-                    end
+                    lastFarmState = farming
                 end
             end)
         end
@@ -1854,6 +1850,9 @@ end
         end
 
         a = CFrame.new(a.Position)
+        -- Garantir que cada tween começa na posição atual da personagem.
+        -- Evita que um tween novo herde a posição final/antiga do bloco.
+        block.CFrame = hrp.CFrame
         local dist = CaculateDistance(hrp.CFrame, a)
 
         if dist <= 5 then
@@ -6163,9 +6162,10 @@ task.spawn(function()
         -- Códigos de 2x EXP listados como ativos em outubro de 2026.
         -- 1lostadmin exige um espaço no final, conforme algumas listas.
         local REDEEM_CODES = {
-            -- Códigos de EXP (grafia conforme listas recentes).
+            -- Códigos de 2x EXP; grafia exata e espaço final onde necessário.
             "SUB2GAMERROBOT_EXP1",
             "EASTEREXP",
+            "1lostadmin ",
             "Axiore",
             "TheGreatAce",
             "Sub2Fer999",
@@ -6181,14 +6181,7 @@ task.spawn(function()
             "StrawHatMaine",
             "TantaiGaming",
             "Bluxxy",
-            -- Outros códigos que não dão 2x EXP, mas continuam úteis.
-            "fudd10",
-            "fudd10_V2",
-            "Chandler",
-            "Bignews",
-            "KITT_RESET",
-            "Sub2UncleKizaru",
-            "SUB2GAMERROBOT_RESET1",
+            "LIGHTNINGABUSE",
         }
 
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -6213,13 +6206,15 @@ task.spawn(function()
         print("[BombaCat Hub] AutoRedeem iniciado; serão tentados " .. #REDEEM_CODES .. " códigos. Os já usados não podem ser resgatados outra vez.")
         for _, code in ipairs(REDEEM_CODES) do
             local ok, result = pcall(function()
+                -- Este é o mesmo comando de resgate usado pelo sistema de códigos de Blox Fruits.
                 return commF:InvokeServer("Redeem", code)
             end)
             if not ok then
-                warn("[BombaCat Hub] Erro de chamada para [" .. code .. "]:", tostring(result))
+                warn("[BombaCat Hub] ERRO ao chamar Redeem para [" .. code .. "]: " .. tostring(result))
+            elseif result == nil then
+                warn("[BombaCat Hub] [" .. code .. "] servidor devolveu nil; não é possível confirmar o resgate.")
             else
-                local response = result == nil and "resposta vazia" or tostring(result)
-                print("[BombaCat Hub] " .. code .. " => " .. response)
+                print("[BombaCat Hub] Resposta do servidor para [" .. code .. "]: " .. tostring(result))
             end
             task.wait(1.5)
         end
