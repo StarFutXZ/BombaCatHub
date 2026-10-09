@@ -835,11 +835,32 @@ function hoangtuveu()
     local panel = make("Frame", {Name="MainPanel", AnchorPoint=Vector2.new(0.5,0.5), Position=UDim2.new(0.5,0,0.5,0), Size=UDim2.new(0,394,0,292), BackgroundColor3=panelColor, BorderSizePixel=0}, gui)
     corner(panel, 16)
     make("UIStroke", {Color=gold, Thickness=1.6, Transparency=0.04}, panel)
+
+    -- Floating top pill (the small "island" in the reference): stays visible
+    -- while the main dashboard is hidden and toggles the dashboard on tap.
+    local island = make("TextButton", {
+        Name="BombaCatIsland", AnchorPoint=Vector2.new(0.5,0),
+        Position=UDim2.new(0.5,0,0,16), Size=UDim2.new(0,250,0,34),
+        BackgroundColor3=Color3.fromRGB(10,16,25), BackgroundTransparency=0.04,
+        BorderSizePixel=0, Text="", AutoButtonColor=true, ZIndex=20
+    }, gui)
+    corner(island,18)
+    make("UIStroke", {Color=Color3.fromRGB(34,47,59),Thickness=1.2,Transparency=0.1}, island)
+    local islandDot = make("Frame", {Name="StatusDot",Position=UDim2.new(0,12,0.5,-4),Size=UDim2.new(0,8,0,8),BackgroundColor3=green,BorderSizePixel=0,ZIndex=21}, island)
+    corner(islandDot,8)
+    label(island,"IslandBrand","BOMBA",10,gold,Enum.Font.GothamBold,{Position=UDim2.new(0,28,0,0),Size=UDim2.new(0,55,1,0),ZIndex=21})
+    label(island,"IslandTask","Level Farming | Mercenary | ...",10,white,Enum.Font.GothamBold,{Position=UDim2.new(0,84,0,0),Size=UDim2.new(1,-112,1,0),TextTruncate=Enum.TextTruncate.AtEnd,ZIndex=21})
+    local islandArrow = label(island,"IslandArrow","⌃",14,muted,Enum.Font.GothamBold,{Position=UDim2.new(1,-25,0,0),Size=UDim2.new(0,18,1,0),TextXAlignment=Enum.TextXAlignment.Center,ZIndex=21})
+    island.Activated:Connect(function()
+        panel.Visible = not panel.Visible
+        islandArrow.Text = panel.Visible and "⌃" or "⌄"
+    end)
+
     make("UIPadding", {PaddingTop=UDim.new(0,9),PaddingBottom=UDim.new(0,9),PaddingLeft=UDim.new(0,10),PaddingRight=UDim.new(0,10)}, panel)
     make("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,6), FillDirection=Enum.FillDirection.Vertical}, panel)
 
     local header = make("Frame", {Name="Header", LayoutOrder=1, Size=UDim2.new(1,0,0,22), BackgroundTransparency=1}, panel)
-    label(header,"HubTitle","BOMBCAT HUB",13,gold,Enum.Font.GothamBold,{Size=UDim2.new(0.64,0,1,0),Position=UDim2.new(0,0,0,0)})
+    label(header,"HubTitle","BombaCat Hub",13,gold,Enum.Font.GothamBold,{Size=UDim2.new(0.64,0,1,0),Position=UDim2.new(0,0,0,0)})
     local active = make("TextLabel", {Name="ActiveBadge",Text="● ACTIVE",TextSize=9,Font=Enum.Font.GothamBold,TextColor3=green,BackgroundColor3=Color3.fromRGB(20,48,40),BorderSizePixel=0,Size=UDim2.new(0,62,0,19),Position=UDim2.new(1,-62,0,1)}, header)
     corner(active,12)
     make("Frame", {Name="HeaderDivider",LayoutOrder=2,Size=UDim2.new(1,0,0,1),BackgroundColor3=Color3.fromRGB(49,54,66),BorderSizePixel=0},panel)
@@ -936,7 +957,10 @@ function hoangtuveu()
     end)
     getgenv().alert = function() end
     W.SetText = SetText
-    W.ToggleUI = function() gui.Enabled = not gui.Enabled end
+    W.ToggleUI = function()
+        panel.Visible = not panel.Visible
+        islandArrow.Text = panel.Visible and "⌃" or "⌄"
+    end
     W.ToggleInterface = W.ToggleUI
     W.RegisterForBlur = function() end
 
