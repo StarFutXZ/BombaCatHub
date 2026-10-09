@@ -47,9 +47,9 @@ Config = {
         GodhumanAtV2Mastery  = 400,
     },
     AutoKen = true,
-    BringMobs = false,
+    BringMobs = true,
     PanicMode = {
-        Enabled          = true,
+        Enabled          = false,
         LowHealthPercent = 20,
         SafeHealthPercent = 75,
         EscapeHeight     = 2000,
@@ -1863,7 +1863,7 @@ end
         end
 
         -- O tempo do tween é distância / divisor; divisor maior significa viagem mais rápida.
-        local divisor = 160
+        local divisor = 230
         local duration = dist / divisor
 
         -- [FIXED - port tween từ main_red_magic_beta.txt] Tween "block"
@@ -6163,17 +6163,17 @@ task.spawn(function()
         -- Códigos de 2x EXP listados como ativos em outubro de 2026.
         -- 1lostadmin exige um espaço no final, conforme algumas listas.
         local REDEEM_CODES = {
+            -- Códigos de EXP (grafia conforme listas recentes).
             "SUB2GAMERROBOT_EXP1",
             "EASTEREXP",
-            "LIGHTNINGABUSE",
             "Axiore",
             "TheGreatAce",
             "Sub2Fer999",
             "Enyu_is_Pro",
             "JCWK",
-            "StarcodeHEO",
-            "MagicBUS",
-            "KittGaming",
+            "Starcodeheo",
+            "Magicbus",
+            "Kittgaming",
             "Sub2CaptainMaui",
             "Sub2OfficialNoobie",
             "Sub2NoobMaster123",
@@ -6181,7 +6181,14 @@ task.spawn(function()
             "StrawHatMaine",
             "TantaiGaming",
             "Bluxxy",
-            "1lostadmin ",
+            -- Outros códigos que não dão 2x EXP, mas continuam úteis.
+            "fudd10",
+            "fudd10_V2",
+            "Chandler",
+            "Bignews",
+            "KITT_RESET",
+            "Sub2UncleKizaru",
+            "SUB2GAMERROBOT_RESET1",
         }
 
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -6193,23 +6200,30 @@ task.spawn(function()
         task.wait(8)
 
         local remotes = ReplicatedStorage:WaitForChild("Remotes", 30)
-        local commF = remotes and (remotes:FindFirstChild("CommF_") or remotes:WaitForChild("CommF_", 15))
+        local commF = remotes and remotes:FindFirstChild("CommF_")
         if not commF then
-            warn("[BombaCat Hub] AutoRedeem: CommF_ não encontrado. Não foi possível enviar os códigos.")
+            warn("[BombaCat Hub] AutoRedeem: ReplicatedStorage.Remotes.CommF_ não encontrado. O jogo pode ter alterado o sistema de códigos.")
+            return
+        end
+        if not commF:IsA("RemoteFunction") then
+            warn("[BombaCat Hub] AutoRedeem: CommF_ existe mas não é RemoteFunction; não foi possível resgatar.")
             return
         end
 
+        print("[BombaCat Hub] AutoRedeem iniciado; serão tentados " .. #REDEEM_CODES .. " códigos. Os já usados não podem ser resgatados outra vez.")
         for _, code in ipairs(REDEEM_CODES) do
             local ok, result = pcall(function()
                 return commF:InvokeServer("Redeem", code)
             end)
-            if ok then
-                print("[BombaCat Hub] Resposta do código [" .. code .. "]:", result == nil and "sem resposta do servidor" or tostring(result))
+            if not ok then
+                warn("[BombaCat Hub] Erro de chamada para [" .. code .. "]:", tostring(result))
             else
-                warn("[BombaCat Hub] Erro ao enviar código [" .. code .. "]:", tostring(result))
+                local response = result == nil and "resposta vazia" or tostring(result)
+                print("[BombaCat Hub] " .. code .. " => " .. response)
             end
-            task.wait(1.2)
+            task.wait(1.5)
         end
+        print("[BombaCat Hub] AutoRedeem terminou. Consulta as respostas acima para saber quais foram aceites/rejeitadas.")
     end)
 
     -- AUTO RANDOM FRUIT (GACHA - Zioles)
@@ -6641,233 +6655,7 @@ getgenv().VOidAttack = CFG
 
 end
 
---============================================================
--- HEX HUB UI (extraída)
---============================================================
-task.spawn(function()
-    local Players = game:GetService("Players")
-    local TweenService = game:GetService("TweenService")
-    local CoreGui = game:GetService("CoreGui")
-    local LP = Players.LocalPlayer
-    local RS = game:GetService("ReplicatedStorage")
-    local PlayerGui = LP:WaitForChild("PlayerGui")
-    local CommF
-    pcall(function()
-        local Remotes = RS:WaitForChild("Remotes", 5)
-        if Remotes then CommF = Remotes:WaitForChild("CommF_", 5) end
-    end)
-
-    for _, container in ipairs({CoreGui, PlayerGui}) do
-        for _, name in ipairs({"Noguchi Status", "Noguchi Ui", "Noguchi Toggle"}) do
-            pcall(function()
-                local old = container:FindFirstChild(name)
-                if old then old:Destroy() end
-            end)
-        end
-    end
-
-    local UI = {}
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "Noguchi Ui"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.DisplayOrder = 50
-    ScreenGui.IgnoreGuiInset = true
-    ScreenGui.Parent = PlayerGui
-
-    local Frame = Instance.new("Frame", ScreenGui)
-    Frame.AnchorPoint = Vector2.new(0.5, 0.5)
-    Frame.Size = UDim2.new(0, 600, 0, 400)
-    Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-    Frame.BackgroundTransparency = 1
-    Frame.BorderSizePixel = 0
-    Frame.Active = false
-    Frame.Visible = true
-
-    local Frame2 = Instance.new("Frame", Frame)
-    Frame2.AnchorPoint = Vector2.new(0.5, 0.5)
-    Frame2.Size = UDim2.new(1, -47, 1, -47)
-    Frame2.Position = UDim2.new(0.5, 0, 0.5, 0)
-    Frame2.BackgroundColor3 = Color3.new(0, 0, 0)
-    Frame2.BackgroundTransparency = 0.5
-    Frame2.BorderSizePixel = 0
-    Instance.new("UICorner", Frame2).CornerRadius = UDim.new(0, 5)
-
-    local UIStroke = Instance.new("UIStroke", Frame2)
-    UIStroke.Color = Color3.new(255, 255, 255)
-    UIStroke.Thickness = 4
-
-    local UIGradient = Instance.new("UIGradient", UIStroke)
-    UIGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(204, 52, 235)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(97, 0, 117))
-    })
-
-    local function makeLabel(text, pos, size)
-        local lbl = Instance.new("TextLabel", Frame2)
-        lbl.Size = size or UDim2.new(0, 200, 0, 18)
-        lbl.Position = pos
-        lbl.BackgroundTransparency = 1
-        lbl.Text = text
-        lbl.TextColor3 = Color3.new(1, 1, 1)
-        lbl.Font = Enum.Font.GothamBold
-        lbl.TextSize = 16
-        lbl.TextXAlignment = Enum.TextXAlignment.Left
-        lbl.ZIndex = 2
-        return lbl
-    end
-
-    local TextLabel = makeLabel("Hex Hub", UDim2.new(0.4, 0, 0.05, 0))
-    local UIGradient2 = Instance.new("UIGradient", TextLabel)
-    UIGradient2.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(204, 52, 235)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(97, 0, 117))
-    })
-
-    local TextLabel2 = makeLabel(" Account Stats ", UDim2.new(0.2, 0, 0.25, 0), UDim2.new(0, 150, 0, 18))
-    TextLabel2.TextSize = 18
-    local UIGradient3 = Instance.new("UIGradient", TextLabel2)
-    UIGradient3.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(204, 52, 235)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(97, 0, 117))
-    })
-
-    local TextLabel3 = makeLabel(" Account Items ", UDim2.new(0.75, 0, 0.25, 0), UDim2.new(0, 150, 0, 18))
-    TextLabel3.TextSize = 18
-    local UIGradient4 = Instance.new("UIGradient", TextLabel3)
-    UIGradient4.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(204, 52, 235)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(97, 0, 117))
-    })
-
-    UI.Level = makeLabel("Level: 0", UDim2.new(0.07, 0, 0.35, 0))
-    UI.Race = makeLabel("Race: ?", UDim2.new(0.07, 0, 0.45, 0))
-    UI.Beli = makeLabel("Beli: 0", UDim2.new(0.07, 0, 0.55, 0))
-    UI.Frag = makeLabel("Frag: 0", UDim2.new(0.07, 0, 0.65, 0))
-    UI.GodHuman = makeLabel("🔴 GodHuman", UDim2.new(0.07, 0, 0.80, 0))
-    UI.CDK = makeLabel("🔴 Cursed Dual Katana", UDim2.new(0.4, 0, 0.80, 0))
-    UI.SkullGuitar = makeLabel("🔴 Skull Guitar", UDim2.new(0.07, 0, 0.90, 0))
-    UI.MirrorFractal = makeLabel("🔴 Mirror Fractal", UDim2.new(0.4, 0, 0.90, 0))
-    UI.Valkyrie = makeLabel("🔴 Valkyrie Helm", UDim2.new(0.75, 0, 0.80, 0), UDim2.new(0, 150, 0, 18))
-    UI.PullLever = makeLabel("🔴 Pull Lever", UDim2.new(0.75, 0, 0.90, 0), UDim2.new(0, 150, 0, 18))
-
-    local CanvasGroup = Instance.new("CanvasGroup", Frame2)
-    CanvasGroup.Size = UDim2.new(0.4, 0, 0.35, 0)
-    CanvasGroup.Position = UDim2.new(0.55, 0, 0.35, 0)
-    CanvasGroup.BackgroundTransparency = 1
-
-    local ScrollingFrame = Instance.new("ScrollingFrame", CanvasGroup)
-    ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-    ScrollingFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    ScrollingFrame.Size = UDim2.new(1, 0, 1, 0)
-    ScrollingFrame.BackgroundTransparency = 1
-    ScrollingFrame.BorderSizePixel = 0
-    ScrollingFrame.ScrollBarImageTransparency = 1
-    ScrollingFrame.ScrollBarThickness = 4
-    ScrollingFrame.ZIndex = 2
-
-    local UIListLayout = Instance.new("UIListLayout", ScrollingFrame)
-    UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    UIListLayout.Padding = UDim.new(0, 2)
-
-    UI.addItemLabel = function(text)
-        local label = Instance.new("TextLabel", ScrollingFrame)
-        label.Size = UDim2.new(1, 0, 0, 18)
-        label.BackgroundTransparency = 1
-        label.Text = text
-        label.TextColor3 = Color3.new(1, 1, 1)
-        label.Font = Enum.Font.GothamBold
-        label.TextSize = 16
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.ZIndex = 2
-        return { Destroy = function() label:Destroy() end }
-    end
-
-    local godhumanUnlocked = false
-    if CommF then
-        task.spawn(function()
-            while not (CommF:InvokeServer("BuyGodhuman") == 1 or CommF:InvokeServer("BuyGodhuman") == 2) do
-                task.wait(3600)
-            end
-            godhumanUnlocked = true
-        end)
-    end
-    UI.getGodHuman = function() return godhumanUnlocked end
-
-    for _, grad in ipairs({UIGradient, UIGradient2, UIGradient3, UIGradient4}) do
-        task.spawn(function()
-            while true do
-                local tween = TweenService:Create(grad, TweenInfo.new(3, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, -1, false, 0), { Rotation = 360 })
-                tween:Play()
-                tween.Completed:Wait()
-                grad.Rotation = 0
-            end
-        end)
-    end
-
-    local ToggleBtn = Instance.new("ImageButton")
-    ToggleBtn.Name = "Noguchi Toggle"
-    ToggleBtn.Size = UDim2.new(0, 55, 0, 55)
-    ToggleBtn.AnchorPoint = Vector2.new(0, 0.5)
-    ToggleBtn.Position = UDim2.new(0, 15, 0.5, 0)
-    ToggleBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    ToggleBtn.Image = "rbxthumb://type=Asset&id=100653737935048&w=420&h=420"
-    ToggleBtn.ZIndex = 100
-    ToggleBtn.Draggable = true
-    ToggleBtn.Active = true
-        ToggleBtn.Parent = ScreenGui
-    Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
-    local BtnStroke = Instance.new("UIStroke", ToggleBtn)
-    BtnStroke.Color = Color3.fromRGB(255, 255, 255)
-    BtnStroke.Thickness = 2.5
-    BtnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    ToggleBtn.MouseButton1Click:Connect(function()
-        Frame.Visible = not Frame.Visible
-    end)
-    -- stats (1s)
-    task.spawn(function()
-        while task.wait(1) do
-            pcall(function()
-                local data = LP:FindFirstChild("Data")
-                if data then
-                    UI.Level.Text = "Level: " .. tostring(data:FindFirstChild("Level") and data.Level.Value or 0)
-                    UI.Race.Text = "Race: " .. tostring(data:FindFirstChild("Race") and data.Race.Value or "?")
-                    UI.Beli.Text = "Beli: " .. tostring(data:FindFirstChild("Beli") and data.Beli.Value or 0)
-                    local frags = data:FindFirstChild("Fragments")
-                    UI.Frag.Text = "Frag: " .. (frags and tostring(frags.Value) or "Only Sea 2, 3")
-                end
-            end)
-        end
-    end)
-
-    -- inventario (2s)
-    local _inventoryLabels = {}
-    task.spawn(function()
-        while task.wait(2) do
-            if not CommF then continue end
-            pcall(function()
-                for labelObj in pairs(_inventoryLabels) do pcall(function() labelObj:Destroy() end) end
-                _inventoryLabels = {}
-                local inventory = CommF:InvokeServer("getInventory")
-                if type(inventory) == "table" then
-                    for _, item in pairs(inventory) do
-                        local itemName = item.Name or "?"
-                        local labelObj = UI.addItemLabel(string.format("%s - %s", itemName, item.Count or item.Type or ""))
-                        _inventoryLabels[labelObj] = true
-                        if itemName == "Cursed Dual Katana" then UI.CDK.Text = "🟢 Cursed Dual Katana"
-                        elseif itemName == "Skull Guitar" then UI.SkullGuitar.Text = "🟢 Skull Guitar"
-                        elseif itemName == "Mirror Fractal" then UI.MirrorFractal.Text = "🟢 Mirror Fractal"
-                        elseif itemName == "Valkyrie Helm" then UI.Valkyrie.Text = "🟢 Valkyrie Helm" end
-                    end
-                end
-                UI.GodHuman.Text = UI.getGodHuman() and "🟢 GodHuman" or "🔴 GodHuman"
-                local doorOpen = CommF:InvokeServer("CheckTempleDoor")
-                UI.PullLever.Text = doorOpen and "🟢 Pull Lever" or "🔴 Pull Lever"
-            end)
-        end
-    end)
-
-    getgenv().HexUI = UI
-end)
+-- Interface HEX Hub antiga removida; mantida a interface principal BombaCat Hub.
 
 -- Iniciar o loop principal apenas depois de configurar as funções extras.
 hoangtuveu()
