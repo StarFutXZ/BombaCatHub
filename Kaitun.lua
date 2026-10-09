@@ -840,7 +840,7 @@ function hoangtuveu()
     -- while the main dashboard is hidden and toggles the dashboard on tap.
     local island = make("TextButton", {
         Name="BombaCatIsland", AnchorPoint=Vector2.new(0.5,0),
-        Position=UDim2.new(0.5,0,0,16), Size=UDim2.new(0,250,0,34),
+        Position=UDim2.new(0.5,0,0,2), Size=UDim2.new(0,320,0,34),
         BackgroundColor3=Color3.fromRGB(10,16,25), BackgroundTransparency=0.04,
         BorderSizePixel=0, Text="", AutoButtonColor=true, ZIndex=20
     }, gui)
@@ -848,12 +848,12 @@ function hoangtuveu()
     make("UIStroke", {Color=Color3.fromRGB(34,47,59),Thickness=1.2,Transparency=0.1}, island)
     local islandDot = make("Frame", {Name="StatusDot",Position=UDim2.new(0,12,0.5,-4),Size=UDim2.new(0,8,0,8),BackgroundColor3=green,BorderSizePixel=0,ZIndex=21}, island)
     corner(islandDot,8)
-    label(island,"IslandBrand","BOMBA",10,gold,Enum.Font.GothamBold,{Position=UDim2.new(0,28,0,0),Size=UDim2.new(0,55,1,0),ZIndex=21})
-    label(island,"IslandTask","Level Farming | Mercenary | ...",10,white,Enum.Font.GothamBold,{Position=UDim2.new(0,84,0,0),Size=UDim2.new(1,-112,1,0),TextTruncate=Enum.TextTruncate.AtEnd,ZIndex=21})
-    local islandArrow = label(island,"IslandArrow","⌃",14,muted,Enum.Font.GothamBold,{Position=UDim2.new(1,-25,0,0),Size=UDim2.new(0,18,1,0),TextXAlignment=Enum.TextXAlignment.Center,ZIndex=21})
+    label(island,"IslandBrand","BombaCat Hub",10,gold,Enum.Font.GothamBold,{Position=UDim2.new(0,28,0,0),Size=UDim2.new(0,91,1,0),ZIndex=21})
+    label(island,"IslandTask","Level Farming | Mercenary | ...",10,white,Enum.Font.GothamBold,{Position=UDim2.new(0,123,0,0),Size=UDim2.new(1,-151,1,0),TextTruncate=Enum.TextTruncate.AtEnd,ZIndex=21})
+    local islandArrow = label(island,"IslandArrow",panel.Visible and "⌄" or "⌃",14,muted,Enum.Font.GothamBold,{Position=UDim2.new(1,-25,0,0),Size=UDim2.new(0,18,1,0),TextXAlignment=Enum.TextXAlignment.Center,ZIndex=21})
     island.Activated:Connect(function()
         panel.Visible = not panel.Visible
-        islandArrow.Text = panel.Visible and "⌃" or "⌄"
+        islandArrow.Text = panel.Visible and "⌄" or "⌃"
     end)
 
     make("UIPadding", {PaddingTop=UDim.new(0,9),PaddingBottom=UDim.new(0,9),PaddingLeft=UDim.new(0,10),PaddingRight=UDim.new(0,10)}, panel)
@@ -959,7 +959,7 @@ function hoangtuveu()
     W.SetText = SetText
     W.ToggleUI = function()
         panel.Visible = not panel.Visible
-        islandArrow.Text = panel.Visible and "⌃" or "⌄"
+        islandArrow.Text = panel.Visible and "⌄" or "⌃"
     end
     W.ToggleInterface = W.ToggleUI
     W.RegisterForBlur = function() end
