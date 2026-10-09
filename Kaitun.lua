@@ -1943,17 +1943,27 @@ end
     local X = (Services.ReplicatedStorage.Modules.Net)
     local w = require(X):RemoteEvent("RegisterAttack", true)
     local D = require(X):RemoteEvent("RegisterHit", true)
-    function h:Attack()
+    function h:Attack(target)
         local X = {}
-        for y, y in pairs(GetAllBladeHits()) do table.insert(X, y) end
-        for y, y in pairs(Getplayerhit()) do table.insert(X, y) end
+        -- No farming, limitar o hit ao NPC atual; não incluir jogadores próximos.
+        if target and target.Parent and target:FindFirstChild("Humanoid")
+            and target.Humanoid.Health > 0 and target:FindFirstChild("HumanoidRootPart") then
+            local character = game.Players.LocalPlayer.Character
+            local root = character and character:FindFirstChild("HumanoidRootPart")
+            if root and (target.HumanoidRootPart.Position - root.Position).Magnitude <= 65 then
+                table.insert(X, target)
+            end
+        else
+            for _, mob in pairs(GetAllBladeHits()) do table.insert(X, mob) end
+        end
         if #X == 0 then return end
         local y = {[1] = nil, [2] = {}, [4] = "078da5141"}
-        for L, L in pairs(X) do
+        for _, mob in pairs(X) do
+            local head = mob:FindFirstChild("Head") or mob.HumanoidRootPart
             w:FireServer(0)
-            if not y[1] then y[1] = L.Head end
-            table.insert(y[2], {[1] = L, [2] = L.HumanoidRootPart})
-            table.insert(y[2], L)
+            if not y[1] then y[1] = head end
+            table.insert(y[2], {[1] = mob, [2] = mob.HumanoidRootPart})
+            table.insert(y[2], mob)
         end
         D:FireServer(unpack(y))
     end
@@ -1967,6 +1977,9 @@ function W.Attack(target)
     local now = os.clock()
     if now - _lastToolAttack < 0.12 then return end
     _lastToolAttack = now
+    -- Tentar o hit normal do jogo e o registo de hit apenas no NPC-alvo.
+    -- Se o servidor rejeitar o registo remoto, a ativação normal continua a ser tentada.
+    pcall(function() h:Attack(target) end)
     pcall(function()
         local character = game.Players.LocalPlayer.Character
         local tool = character and character:FindFirstChildOfClass("Tool")
@@ -2114,9 +2127,9 @@ end
                         if MonResult.Name == "Don Swan" then Storage:Set("SwanDefeated", true) end
                         break
                     end
-                    -- Aproximação fixa ao NPC: não usar CaculateCircreDirection,
-                    -- pois essa função move o jogador em círculo à volta do alvo.
-                    TweenController.Create(p.Position + Vector3.new(0, 5, 0))
+                    -- Aproximação fixa e acima do NPC: não usar CaculateCircreDirection,
+                    -- que move em círculo. 12 studs evitam entrar no volume físico do NPC.
+                    TweenController.Create(p.Position + Vector3.new(0, 12, 0))
                     if CaculateDistance(p.Position + Vector3.new(0, 35, 0)) < 150 then
                         y = D and D()
                         CombatController.Grab(L or '')
@@ -6129,36 +6142,11 @@ end
         end)
     end
 
-    -- ============================================================
-    -- VÒNG LẶP CHÍNH
-    -- ============================================================
-    while task.wait() do
-        if Config.Configuration.HopWhenIdle and LastIdling and os.time() - LastIdling > 300.0 then
-            SetTask('MainTask', "Rejoining due idle in 10 min!")
-            task.wait(1)
-            while task.wait() do game:GetService('TeleportService'):Teleport(game.PlaceId) end
-        end
-        if not AnimationDelay or os.time() - AnimationDelay > 60 then
-            AnimationDelay = os.time()
-        end
-        if ScriptStorage.PlayerData.Level and ScriptStorage.PlayerData.Level > 0 then
-            local J, r = xpcall(RefreshTasksData, debug.traceback)
-            if not J then 
-                print('[ Error ]', r)
-                task.wait(1)
-            end
-        else
-            task.wait(1)
-            pcall(RefreshPlayerData)
-        end
-    end
-end
-
 --============================================================
 -- [EXTRAS] NO ANIMATION + AUTO REDEEM CODES + AUTO RANDOM FRUIT (GACHA)
 -- Opções (pode editar/desligar):
 Config.Extras = {
-    NoAnimation      = true,   -- desliga as animações do personagem
+    NoAnimation      = false,  -- manter animações para não interromper ataques melee
     AutoRedeemCodes  = true,   -- resgata todos os códigos no início
     AutoGachaFruit   = true,   -- rola o Gacha (Random Fruit) automaticamente
     GachaInterval    = 5,      -- segundos entre cada checagem do gacha
@@ -6195,7 +6183,7 @@ task.spawn(function()
         -- Códigos de 2x EXP listados como ativos em outubro de 2026.
         -- 1lostadmin exige um espaço no final, conforme algumas listas.
         local REDEEM_CODES = {
-            -- Códigos de 2x EXP; grafia exata e espaço final onde necessário.
+            -- 2x EXP
             "SUB2GAMERROBOT_EXP1",
             "EASTEREXP",
             "1lostadmin ",
@@ -6214,7 +6202,14 @@ task.spawn(function()
             "StrawHatMaine",
             "TantaiGaming",
             "Bluxxy",
-            "LIGHTNINGABUSE",
+            -- Outros códigos que dão reset de stats, título ou Beli.
+            "SUB2GAMERROBOT_RESET1",
+            "Sub2UncleKizaru",
+            "KITT_RESET",
+            "Bignews",
+            "Fudd10",
+            "Fudd10_v2",
+            "Chandler",
         }
 
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -6226,7 +6221,7 @@ task.spawn(function()
         task.wait(8)
 
         local remotes = ReplicatedStorage:WaitForChild("Remotes", 30)
-        local commF = remotes and remotes:FindFirstChild("CommF_")
+        local commF = remotes and remotes:WaitForChild("CommF_", 30)
         if not commF then
             warn("[BombaCat Hub] AutoRedeem: ReplicatedStorage.Remotes.CommF_ não encontrado. O jogo pode ter alterado o sistema de códigos.")
             return
@@ -6246,6 +6241,11 @@ task.spawn(function()
                 warn("[BombaCat Hub] ERRO ao chamar Redeem para [" .. code .. "]: " .. tostring(result))
             elseif result == nil then
                 warn("[BombaCat Hub] [" .. code .. "] servidor devolveu nil; não é possível confirmar o resgate.")
+            elseif typeof(result) == "table" then
+                local okJson, resultText = pcall(function()
+                    return game:GetService("HttpService"):JSONEncode(result)
+                end)
+                print("[BombaCat Hub] Resposta do servidor para [" .. code .. "]: " .. (okJson and resultText or tostring(result)))
             else
                 print("[BombaCat Hub] Resposta do servidor para [" .. code .. "]: " .. tostring(result))
             end
@@ -6302,6 +6302,33 @@ task.spawn(function()
         Check = function() return GachaCall("Check") end,
     }
 end)
+
+
+    -- ============================================================
+    -- VÒNG LẶP CHÍNH
+    -- ============================================================
+    while task.wait() do
+        if Config.Configuration.HopWhenIdle and LastIdling and os.time() - LastIdling > 300.0 then
+            SetTask('MainTask', "Rejoining due idle in 10 min!")
+            task.wait(1)
+            while task.wait() do game:GetService('TeleportService'):Teleport(game.PlaceId) end
+        end
+        if not AnimationDelay or os.time() - AnimationDelay > 60 then
+            AnimationDelay = os.time()
+        end
+        if ScriptStorage.PlayerData.Level and ScriptStorage.PlayerData.Level > 0 then
+            local J, r = xpcall(RefreshTasksData, debug.traceback)
+            if not J then 
+                print('[ Error ]', r)
+                task.wait(1)
+            end
+        else
+            task.wait(1)
+            pcall(RefreshPlayerData)
+        end
+    end
+end
+
 
 --============================================================
 -- [VOID ATTACK] ATAQUE ENVIADO PELO USUARIO
