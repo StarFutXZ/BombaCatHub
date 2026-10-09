@@ -49,7 +49,7 @@ Config = {
     AutoKen = true,
     BringMobs = true,
     PanicMode = {
-        Enabled          = true,
+        Enabled          = false,
         LowHealthPercent = 20,
         SafeHealthPercent = 75,
         EscapeHeight     = 2000,
@@ -794,136 +794,121 @@ function hoangtuveu()
     local W = {Instances = {}}
     repeat task.wait() until game.CoreGui
 
-    -- ============================================================
-    -- UI TỪ DYNAMICISLAND_AXIOM-1.LUA (CÓ DISCORD + CONTAINER)
-    -- ============================================================
-    local gui = Instance.new('ScreenGui')
-    gui.Name = "KaitunUI"
-    gui.Parent = game:GetService('CoreGui')
+    -- BombaCat Hub dashboard - interface adapted to match the supplied reference
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "BombaCatHubUI"
+    gui.Parent = game:GetService("CoreGui")
     gui.Enabled = true
-    gui.ResetOnSpawn = true
+    gui.ResetOnSpawn = false
     gui.DisplayOrder = 10
     gui.IgnoreGuiInset = false
 
-    local container = Instance.new("Frame")
-    container.Name = "Container"
-    container.Parent = gui
-    container.AnchorPoint = Vector2.new(0.5, 0)
-    container.Position = UDim2.new(0.5, 0, 0.01, 0)
-    container.AutomaticSize = Enum.AutomaticSize.XY
-    container.Size = UDim2.new(0, 0, 0, 0)
-    container.BackgroundTransparency = 1
+    local function make(className, props, parent)
+        local obj = Instance.new(className)
+        for k, v in pairs(props or {}) do obj[k] = v end
+        obj.Parent = parent
+        return obj
+    end
+    local function corner(parent, radius)
+        make("UICorner", {CornerRadius = UDim.new(0, radius or 8)}, parent)
+    end
+    local function label(parent, name, text, size, color, font, props)
+        props = props or {}
+        props.Name = name; props.Text = text; props.TextSize = size
+        props.TextColor3 = color; props.Font = font or Enum.Font.Gotham
+        props.BackgroundTransparency = 1; props.TextXAlignment = props.TextXAlignment or Enum.TextXAlignment.Left
+        return make("TextLabel", props, parent)
+    end
+    local gold = Color3.fromRGB(213, 176, 83)
+    local white = Color3.fromRGB(238, 240, 246)
+    local muted = Color3.fromRGB(155, 164, 181)
+    local cardColor = Color3.fromRGB(15, 20, 32)
 
-    local containerLayout = Instance.new("UIListLayout", container)
-    containerLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    containerLayout.Padding = UDim.new(0, 4)
-    containerLayout.FillDirection = Enum.FillDirection.Vertical
-    containerLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    local panel = make("Frame", {Name="MainPanel", AnchorPoint=Vector2.new(0.5,0.5), Position=UDim2.new(0.5,0,0.5,0), Size=UDim2.new(0,390,0,292), BackgroundColor3=Color3.fromRGB(9,13,23), BorderSizePixel=0}, gui)
+    corner(panel, 15)
+    make("UIStroke", {Color=gold, Thickness=1.4, Transparency=0.08}, panel)
+    make("UIPadding", {PaddingTop=UDim.new(0,10),PaddingBottom=UDim.new(0,10),PaddingLeft=UDim.new(0,10),PaddingRight=UDim.new(0,10)}, panel)
+    local rootLayout = make("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,7), FillDirection=Enum.FillDirection.Vertical}, panel)
 
-    local discordLabel = Instance.new("TextLabel")
-    discordLabel.Name = "DiscordLabel"
-    discordLabel.Parent = container
-    discordLabel.LayoutOrder = 1
-    discordLabel.AutomaticSize = Enum.AutomaticSize.XY
-    discordLabel.Size = UDim2.new(0, 0, 0, 0)
-    discordLabel.BackgroundTransparency = 1
-    discordLabel.Text = "https://discord.gg/KrEPeAtjn"
-    discordLabel.TextSize = 13
-    discordLabel.Font = Enum.Font.Highway
-    discordLabel.TextColor3 = Color3.fromRGB(255, 45, 155)
-    discordLabel.TextXAlignment = Enum.TextXAlignment.Center
+    local header = make("Frame", {Name="Header", LayoutOrder=1, Size=UDim2.new(1,0,0,25), BackgroundTransparency=1}, panel)
+    label(header,"HubTitle","BOMBCAT HUB",14,gold,Enum.Font.GothamBold,{Size=UDim2.new(0.63,0,1,0),Position=UDim2.new(0,0,0,0)})
+    local active = make("TextLabel", {Name="ActiveBadge",Text="● ACTIVE",TextSize=10,Font=Enum.Font.GothamBold,TextColor3=Color3.fromRGB(121,225,168),BackgroundColor3=Color3.fromRGB(23,52,43),BorderSizePixel=0,Size=UDim2.new(0,67,0,20),Position=UDim2.new(1,-67,0,2)}, header)
+    corner(active,10)
+    local separator = make("Frame", {LayoutOrder=2,Size=UDim2.new(1,0,0,1),BackgroundColor3=Color3.fromRGB(49,53,63),BorderSizePixel=0},panel)
 
-    local frame = Instance.new("Frame")
-    frame.Name = "Frame"
-    frame.Parent = container
-    frame.LayoutOrder = 2
-    frame.AutomaticSize = Enum.AutomaticSize.XY
-    frame.Size = UDim2.new(0, 0, 0, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(38, 5, 25)
-    frame.BackgroundTransparency = 0.25
-    frame.BorderSizePixel = 0
+    local taskCard = make("Frame", {Name="MissionControl",LayoutOrder=3,Size=UDim2.new(1,0,0,82),BackgroundColor3=cardColor,BorderSizePixel=0},panel); corner(taskCard,9)
+    make("UIPadding",{PaddingTop=UDim.new(0,8),PaddingBottom=UDim.new(0,6),PaddingLeft=UDim.new(0,9),PaddingRight=UDim.new(0,9)},taskCard)
+    label(taskCard,"MissionTitle","◉  MISSION CONTROL",10,gold,Enum.Font.GothamBold,{Size=UDim2.new(1,0,0,14),Position=UDim2.new(0,0,0,0)})
+    local taskLabel = label(taskCard,"Task","Level Farming | Loading quest...",11,white,Enum.Font.Gotham,{Size=UDim2.new(1,0,0,29),Position=UDim2.new(0,0,0,19),TextWrapped=true})
+    local subTaskLabel = label(taskCard,"SubTask","Preparing next task...",10,muted,Enum.Font.Gotham,{Size=UDim2.new(1,0,0,23),Position=UDim2.new(0,0,0,49),TextWrapped=true})
 
-    local padding = Instance.new("UIPadding", frame)
-    padding.PaddingTop = UDim.new(0, 8)
-    padding.PaddingBottom = UDim.new(0, 8)
-    padding.PaddingLeft = UDim.new(0, 12)
-    padding.PaddingRight = UDim.new(0, 12)
+    local auxCard = make("Frame",{Name="AuxiliaryTask",LayoutOrder=4,Size=UDim2.new(1,0,0,38),BackgroundColor3=cardColor,BorderSizePixel=0},panel); corner(auxCard,8)
+    label(auxCard,"AuxTitle","◉  AUXILIARY TASK",9,gold,Enum.Font.GothamBold,{Size=UDim2.new(1,-12,0,13),Position=UDim2.new(0,8,0,4)})
+    local auxValue = label(auxCard,"AuxValue","Farming until enough mastery for Electro",10,white,Enum.Font.Gotham,{Size=UDim2.new(1,-12,0,14),Position=UDim2.new(0,8,0,19)})
 
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
+    local engineCard = make("Frame",{Name="EngineController",LayoutOrder=5,Size=UDim2.new(1,0,0,34),BackgroundColor3=cardColor,BorderSizePixel=0},panel); corner(engineCard,8)
+    label(engineCard,"EngineTitle","◉  ENGINE CONTROLLER",9,gold,Enum.Font.GothamBold,{Size=UDim2.new(1,-12,0,12),Position=UDim2.new(0,8,0,3)})
+    local engineValue = label(engineCard,"EngineValue","LevelFarm",10,white,Enum.Font.Gotham,{Size=UDim2.new(1,-12,0,13),Position=UDim2.new(0,8,0,17)})
 
-    local stroke = Instance.new("UIStroke", frame)
-    stroke.Color = Color3.fromRGB(255, 45, 155)
-    stroke.Thickness = 1.5
-    stroke.Transparency = 0
+    local stats = make("Frame",{Name="Stats",LayoutOrder=6,Size=UDim2.new(1,0,0,47),BackgroundTransparency=1},panel)
+    local statsLayout = make("UIListLayout",{FillDirection=Enum.FillDirection.Horizontal,SortOrder=Enum.SortOrder.LayoutOrder,Padding=UDim.new(0,6)},stats)
+    local function statCard(name,titleText,valueText,order)
+        local card=make("Frame",{Name=name,LayoutOrder=order,Size=UDim2.new(1/3,-4,1,0),BackgroundColor3=cardColor,BorderSizePixel=0},stats); corner(card,8)
+        label(card,name.."Title",titleText,9,gold,Enum.Font.GothamBold,{Size=UDim2.new(1,-10,0,13),Position=UDim2.new(0,7,0,5)})
+        return label(card,name.."Value",valueText,13,white,Enum.Font.GothamBold,{Size=UDim2.new(1,-10,0,18),Position=UDim2.new(0,7,0,22)})
+    end
+    local levelValue=statCard("PlayerLevel","♧  PLAYER LEVEL","--",1)
+    local beliValue=statCard("Beli","◈  BELI / WEALTH","$ --",2)
+    local fragmentsValue=statCard("Fragments","✧  FRAGMENTS","--",3)
 
-    local layout = Instance.new("UIListLayout", frame)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0, 4)
-    layout.FillDirection = Enum.FillDirection.Vertical
-
-    local features = Instance.new("Frame")
-    features.Name = "Features"
-    features.Parent = frame
-    features.LayoutOrder = 1
-    features.AutomaticSize = Enum.AutomaticSize.XY
-    features.Size = UDim2.new(0, 0, 0, 0)
-    features.BackgroundTransparency = 1
-
-    local featLayout = Instance.new("UIListLayout", features)
-    featLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    featLayout.Padding = UDim.new(0, 2)
-    featLayout.FillDirection = Enum.FillDirection.Vertical
-
-    local taskLabel = Instance.new("TextLabel")
-    taskLabel.Name = "Task"
-    taskLabel.Parent = features
-    taskLabel.LayoutOrder = 1
-    taskLabel.AutomaticSize = Enum.AutomaticSize.XY
-    taskLabel.Size = UDim2.new(0, 0, 0, 0)
-    taskLabel.BackgroundTransparency = 1
-    taskLabel.Text = "Status :"
-    taskLabel.TextSize = 14
-    taskLabel.Font = Enum.Font.Ubuntu
-    taskLabel.TextColor3 = Color3.fromRGB(255, 170, 220)
-    taskLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-    local subTaskLabel = Instance.new("TextLabel")
-    subTaskLabel.Name = "SubTask"
-    subTaskLabel.Parent = features
-    subTaskLabel.LayoutOrder = 2
-    subTaskLabel.AutomaticSize = Enum.AutomaticSize.XY
-    subTaskLabel.Size = UDim2.new(0, 0, 0, 0)
-    subTaskLabel.BackgroundTransparency = 1
-    subTaskLabel.Text = "Sub Task :"
-    subTaskLabel.TextSize = 13
-    subTaskLabel.Font = Enum.Font.Ubuntu
-    subTaskLabel.TextColor3 = Color3.fromRGB(255, 170, 220)
-    subTaskLabel.TextTransparency = 0
-    subTaskLabel.TextXAlignment = Enum.TextXAlignment.Left
+    local masteryCard=make("Frame",{Name="CombatMastery",LayoutOrder=7,Size=UDim2.new(1,0,0,39),BackgroundColor3=cardColor,BorderSizePixel=0},panel); corner(masteryCard,8)
+    label(masteryCard,"MasteryTitle","◉  COMBAT MASTERY / ARSENAL",9,gold,Enum.Font.GothamBold,{Size=UDim2.new(1,-14,0,13),Position=UDim2.new(0,8,0,4)})
+    local masteryValue=label(masteryCard,"MasteryValue","Current weapon/style: --",11,white,Enum.Font.Gotham,{Size=UDim2.new(1,-14,0,15),Position=UDim2.new(0,8,0,20)})
 
     W.Instances['Task1'] = taskLabel
     W.Instances['Task2'] = subTaskLabel
     W.Instances['MainTextLabel'] = taskLabel
+    W.Instances['AuxValue'] = auxValue
+    W.Instances['EngineValue'] = engineValue
+    W.Instances['MasteryValue'] = masteryValue
 
     function SetText(key, text)
         task.spawn(function()
-            local label = W.Instances[key]
-            if not label then return end
-            if label.Text == text then return end
+            local target = W.Instances[key]
+            if not target then return end
+            if target.Text == text then return end
             local ts = game:GetService("TweenService")
-            local fadeOut = ts:Create(label, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 1, TextStrokeTransparency = 1})
-            fadeOut:Play()
-            fadeOut.Completed:Wait()
-            label.Text = text
-            local t = 0
-            local fadeIn = ts:Create(label, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = t, TextStrokeTransparency = t})
-            fadeIn:Play()
+            local fadeOut = ts:Create(target,TweenInfo.new(0.15,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{TextTransparency=1})
+            fadeOut:Play(); fadeOut.Completed:Wait()
+            target.Text = tostring(text)
+            ts:Create(target,TweenInfo.new(0.18,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{TextTransparency=0}):Play()
         end)
     end
+    task.spawn(function()
+        while gui.Parent do
+            pcall(function()
+                local data = LocalPlayer:FindFirstChild("Data")
+                local level = data and data:FindFirstChild("Level")
+                local beli = data and data:FindFirstChild("Beli")
+                local frags = data and data:FindFirstChild("Fragments")
+                levelValue.Text = level and tostring(level.Value) or "--"
+                beliValue.Text = beli and ("$ " .. tostring(beli.Value)) or "$ --"
+                fragmentsValue.Text = frags and tostring(frags.Value) or "--"
+                local character = LocalPlayer.Character
+                local tool = character and character:FindFirstChildOfClass("Tool")
+                if not tool then tool = LocalPlayer.Backpack and LocalPlayer.Backpack:FindFirstChildOfClass("Tool") end
+                local mastery = tool and tool:FindFirstChild("Level")
+                masteryValue.Text = tool and (tool.Name .. ": " .. (mastery and tostring(mastery.Value) or "--")) or "Current weapon/style: --"
+            end)
+            task.wait(1)
+        end
+    end)
     getgenv().alert = function() end
     W.SetText = SetText
-    W.ToggleUI = function() end
-    W.ToggleInterface = function() end
+    W.ToggleUI = function() gui.Enabled = not gui.Enabled end
+    W.ToggleInterface = W.ToggleUI
     W.RegisterForBlur = function() end
 
     -- ============================================================
@@ -6109,289 +6094,6 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         end
     end
 end
-
-
---============================================================
--- BOMBACAT HUB UI (painel de estado)
--- Lê: ScriptStorage.Task (MainTask / SubTask), CurrentTask,
---     LocalPlayer.Data (Level / Beli / Fragments), ScriptStorage.Melees
---============================================================
-task.spawn(function()
-    local BC = {
-        HideOldUI = true,                    -- esconde o KaitunUI e o "Noguchi Ui" antigos
-        Title     = "BOMBACAT HUB",
-        Accent    = Color3.fromRGB(255, 200, 40),
-    }
-
-    local Players = game:GetService("Players")
-    local UIS = game:GetService("UserInputService")
-    local LP = Players.LocalPlayer
-    local PlayerGui = LP:WaitForChild("PlayerGui")
-
-    -- container (CoreGui -> PlayerGui como alternativa)
-    local function getParent()
-        local ok, gui = pcall(function()
-            if gethui then return gethui() end
-            return game:GetService("CoreGui")
-        end)
-        if ok and gui then return gui end
-        return PlayerGui
-    end
-    local parent = getParent()
-
-    for _, c in ipairs({parent, PlayerGui}) do
-        pcall(function()
-            local old = c:FindFirstChild("BombaCat Hub")
-            if old then old:Destroy() end
-        end)
-    end
-
-    local C = {
-        bg     = Color3.fromRGB(8, 8, 14),
-        card   = Color3.fromRGB(6, 6, 10),
-        text   = Color3.fromRGB(255, 255, 255),
-        blue   = Color3.fromRGB(90, 170, 255),
-        green  = Color3.fromRGB(60, 220, 130),
-        purple = Color3.fromRGB(170, 90, 255),
-        gold   = BC.Accent,
-    }
-
-    local Gui = Instance.new("ScreenGui")
-    Gui.Name = "BombaCat Hub"
-    Gui.ResetOnSpawn = false
-    Gui.DisplayOrder = 60
-    Gui.IgnoreGuiInset = true
-    Gui.Parent = parent
-
-    local Main = Instance.new("Frame", Gui)
-    Main.Name = "Main"
-    Main.AnchorPoint = Vector2.new(0.5, 0.5)
-    Main.Position = UDim2.new(0.5, 0, 0.5, 0)
-    Main.Size = UDim2.new(0, 600, 0, 440)
-    Main.BackgroundColor3 = C.bg
-    Main.BackgroundTransparency = 0.05
-    Main.BorderSizePixel = 0
-    Main.Active = true
-    Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 14)
-    local mStroke = Instance.new("UIStroke", Main)
-    mStroke.Color = C.gold
-    mStroke.Thickness = 1.5
-    mStroke.Transparency = 0.35
-
-    -- arrastar
-    do
-        local dragging, dragStart, startPos
-        Main.InputBegan:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-                dragging, dragStart, startPos = true, i.Position, Main.Position
-                i.Changed:Connect(function()
-                    if i.UserInputState == Enum.UserInputState.End then dragging = false end
-                end)
-            end
-        end)
-        UIS.InputChanged:Connect(function(i)
-            if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-                local d = i.Position - dragStart
-                Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
-            end
-        end)
-    end
-
-    local function label(p, text, size, color, pos, sz, font)
-        local l = Instance.new("TextLabel", p)
-        l.BackgroundTransparency = 1
-        l.Text = text
-        l.TextSize = size
-        l.TextColor3 = color
-        l.Font = font or Enum.Font.GothamBold
-        l.TextXAlignment = Enum.TextXAlignment.Left
-        l.TextYAlignment = Enum.TextYAlignment.Top
-        l.Position = pos
-        l.Size = sz
-        return l
-    end
-
-    local function card(pos, sz, title, titleColor)
-        local f = Instance.new("Frame", Main)
-        f.BackgroundColor3 = C.card
-        f.BorderSizePixel = 0
-        f.Position = pos
-        f.Size = sz
-        Instance.new("UICorner", f).CornerRadius = UDim.new(0, 10)
-        local s = Instance.new("UIStroke", f)
-        s.Color = Color3.fromRGB(45, 45, 60)
-        s.Thickness = 1
-        label(f, title, 11, titleColor, UDim2.new(0, 12, 0, 8), UDim2.new(1, -24, 0, 14))
-        return f
-    end
-
-    -- cabeçalho
-    label(Main, BC.Title, 18, C.gold, UDim2.new(0, 18, 0, 14), UDim2.new(0, 220, 0, 22))
-
-    local pill = Instance.new("Frame", Main)
-    pill.BackgroundColor3 = Color3.fromRGB(10, 40, 28)
-    pill.BorderSizePixel = 0
-    pill.Position = UDim2.new(0, 200, 0, 14)
-    pill.Size = UDim2.new(0, 78, 0, 22)
-    Instance.new("UICorner", pill).CornerRadius = UDim.new(1, 0)
-    local pStroke = Instance.new("UIStroke", pill)
-    pStroke.Color = C.green
-    pStroke.Thickness = 1
-    local dot = Instance.new("Frame", pill)
-    dot.BackgroundColor3 = C.green
-    dot.BorderSizePixel = 0
-    dot.Position = UDim2.new(0, 10, 0.5, -3)
-    dot.Size = UDim2.new(0, 6, 0, 6)
-    Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
-    local pillText = label(pill, "ACTIVE", 11, C.green, UDim2.new(0, 22, 0, 0), UDim2.new(1, -26, 1, 0))
-    pillText.TextYAlignment = Enum.TextYAlignment.Center
-
-    -- minimizar
-    local MinBtn = Instance.new("TextButton", Main)
-    MinBtn.BackgroundTransparency = 1
-    MinBtn.Text = "—"
-    MinBtn.TextColor3 = C.text
-    MinBtn.TextSize = 18
-    MinBtn.Font = Enum.Font.GothamBold
-    MinBtn.Position = UDim2.new(1, -40, 0, 10)
-    MinBtn.Size = UDim2.new(0, 30, 0, 28)
-
-    -- linha de sessão
-    local Session = Instance.new("Frame", Main)
-    Session.BackgroundColor3 = C.card
-    Session.BorderSizePixel = 0
-    Session.Position = UDim2.new(0, 14, 0, 50)
-    Session.Size = UDim2.new(1, -28, 0, 36)
-    Instance.new("UICorner", Session).CornerRadius = UDim.new(0, 10)
-    local sStroke = Instance.new("UIStroke", Session)
-    sStroke.Color = Color3.fromRGB(45, 45, 60)
-    local avatar = Instance.new("ImageLabel", Session)
-    avatar.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    avatar.Position = UDim2.new(0, 8, 0.5, -12)
-    avatar.Size = UDim2.new(0, 24, 0, 24)
-    Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
-    pcall(function()
-        avatar.Image = Players:GetUserThumbnailAsync(LP.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
-    end)
-    local sessionLbl = label(Session, "", 12, C.gold, UDim2.new(0, 42, 0, 0), UDim2.new(1, -52, 1, 0))
-    sessionLbl.TextYAlignment = Enum.TextYAlignment.Center
-    sessionLbl.TextXAlignment = Enum.TextXAlignment.Right
-
-    -- cartões
-    local missionCard = card(UDim2.new(0, 14, 0, 96),  UDim2.new(0.58, -20, 0, 130), "MISSION CONTROL", C.gold)
-    local auxCard     = card(UDim2.new(0.58, 0, 0, 96), UDim2.new(0.42, -14, 0, 62),  "AUXILIARY TASK", C.blue)
-    local engCard     = card(UDim2.new(0.58, 0, 0, 164), UDim2.new(0.42, -14, 0, 62), "ENGINE CONTROLLER", C.green)
-    local lvlCard     = card(UDim2.new(0, 14, 0, 236),  UDim2.new(0.333, -16, 0, 66), "PLAYER LEVEL", C.gold)
-    local beliCard    = card(UDim2.new(0.333, 0, 0, 236), UDim2.new(0.333, -8, 0, 66), "BELI WEALTH", C.gold)
-    local fragCard    = card(UDim2.new(0.666, -6, 0, 236), UDim2.new(0.334, -8, 0, 66), "FRAGMENTS", C.purple)
-    local combatCard  = card(UDim2.new(0, 14, 0, 312),  UDim2.new(1, -28, 0, 114), "COMBAT MASTERY / ARSENAL", C.purple)
-
-    local function body(cardF, size, h)
-        local l = label(cardF, "-", size, C.text, UDim2.new(0, 12, 0, 28), UDim2.new(1, -24, 0, h))
-        l.TextWrapped = true
-        return l
-    end
-    local missionTxt = body(missionCard, 13, 92)
-    local auxTxt     = body(auxCard, 12, 30)
-    local engTxt     = body(engCard, 13, 30)
-    local lvlTxt     = body(lvlCard, 18, 26)
-    local beliTxt    = body(beliCard, 18, 26)
-    local fragTxt    = body(fragCard, 18, 26)
-    local combatTxt  = body(combatCard, 15, 80)
-
-    local fullSize = Main.Size
-    local minimized = false
-    MinBtn.MouseButton1Click:Connect(function()
-        minimized = not minimized
-        for _, ch in ipairs(Main:GetChildren()) do
-            if ch:IsA("Frame") and ch ~= pill then ch.Visible = not minimized end
-        end
-        Main.Size = minimized and UDim2.new(0, 600, 0, 50) or fullSize
-        MinBtn.Text = minimized and "+" or "—"
-    end)
-
-    -- helpers
-    local function commas(n)
-        n = tonumber(n) or 0
-        local s = tostring(math.floor(n))
-        local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
-        if out:sub(1, 1) == "," then out = out:sub(2) end
-        return out
-    end
-    local function dur(sec)
-        sec = math.max(0, math.floor(sec))
-        local d = math.floor(sec / 86400)
-        local h = math.floor(sec % 86400 / 3600)
-        local m = math.floor(sec % 3600 / 60)
-        local s = sec % 60
-        return d, h, m, s
-    end
-    local function dataValue(name)
-        local ok, v = pcall(function()
-            return LP.Data[name].Value
-        end)
-        if ok then return v end
-        local pd = ScriptStorage and ScriptStorage.PlayerData
-        if pd then return pd[name] end
-        return nil
-    end
-    local function stripPrefix(t)
-        if type(t) ~= "string" then return "-" end
-        return (t:gsub("^MainTask : ", ""):gsub("^SubTask : ", ""))
-    end
-
-    local startT = tonumber(timeee) or os.time()
-
-    task.spawn(function()
-        while Gui.Parent do
-            pcall(function()
-                local T = (ScriptStorage and ScriptStorage.Task) or {}
-                missionTxt.Text = stripPrefix(T.MainTask)
-                auxTxt.Text = stripPrefix(T.SubTask)
-                engTxt.Text = tostring(CurrentTask or "-")
-
-                lvlTxt.Text  = tostring(dataValue("Level") or 0)
-                beliTxt.Text = "$ " .. commas(dataValue("Beli"))
-                fragTxt.Text = tostring(dataValue("Fragments") or 0)
-
-                local lines = {}
-                local melees = (ScriptStorage and ScriptStorage.Melees) or {}
-                for name, v in pairs(melees) do
-                    if type(v) == "number" and v > 0 then
-                        table.insert(lines, name .. ": " .. tostring(v))
-                    end
-                end
-                table.sort(lines)
-                combatTxt.Text = (#lines > 0) and table.concat(lines, "   |   ") or "-"
-
-                local el = os.time() - startT
-                local _, h, m, s = dur(el)
-                local td, th, tm, ts = dur(el + (tonumber(OldSessionTime) or 0))
-                sessionLbl.Text = string.format("%dhrs, %dmin, %dsec  |  Total: %dday, %dhrs, %dmin, %dsec", h, m, s, td, th, tm, ts)
-            end)
-            task.wait(0.5)
-        end
-    end)
-
-    -- esconde as interfaces antigas
-    if BC.HideOldUI then
-        task.spawn(function()
-            while Gui.Parent do
-                for _, c in ipairs({parent, game:GetService("CoreGui"), PlayerGui}) do
-                    pcall(function()
-                        for _, n in ipairs({"KaitunUI", "Noguchi Ui", "Noguchi Toggle"}) do
-                            local g = c:FindFirstChild(n)
-                            if g and g:IsA("ScreenGui") then g.Enabled = false end
-                        end
-                    end)
-                end
-                task.wait(2)
-            end
-        end)
-    end
-
-    getgenv().BombaCatUI = {Gui = Gui, Main = Main}
-end)
 
 hoangtuveu()
 --============================================================
