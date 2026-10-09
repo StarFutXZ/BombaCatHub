@@ -6110,6 +6110,289 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     end
 end
 
+
+--============================================================
+-- BOMBACAT HUB UI (painel de estado)
+-- Lê: ScriptStorage.Task (MainTask / SubTask), CurrentTask,
+--     LocalPlayer.Data (Level / Beli / Fragments), ScriptStorage.Melees
+--============================================================
+task.spawn(function()
+    local BC = {
+        HideOldUI = true,                    -- esconde o KaitunUI e o "Noguchi Ui" antigos
+        Title     = "BOMBACAT HUB",
+        Accent    = Color3.fromRGB(255, 200, 40),
+    }
+
+    local Players = game:GetService("Players")
+    local UIS = game:GetService("UserInputService")
+    local LP = Players.LocalPlayer
+    local PlayerGui = LP:WaitForChild("PlayerGui")
+
+    -- container (CoreGui -> PlayerGui como alternativa)
+    local function getParent()
+        local ok, gui = pcall(function()
+            if gethui then return gethui() end
+            return game:GetService("CoreGui")
+        end)
+        if ok and gui then return gui end
+        return PlayerGui
+    end
+    local parent = getParent()
+
+    for _, c in ipairs({parent, PlayerGui}) do
+        pcall(function()
+            local old = c:FindFirstChild("BombaCat Hub")
+            if old then old:Destroy() end
+        end)
+    end
+
+    local C = {
+        bg     = Color3.fromRGB(8, 8, 14),
+        card   = Color3.fromRGB(6, 6, 10),
+        text   = Color3.fromRGB(255, 255, 255),
+        blue   = Color3.fromRGB(90, 170, 255),
+        green  = Color3.fromRGB(60, 220, 130),
+        purple = Color3.fromRGB(170, 90, 255),
+        gold   = BC.Accent,
+    }
+
+    local Gui = Instance.new("ScreenGui")
+    Gui.Name = "BombaCat Hub"
+    Gui.ResetOnSpawn = false
+    Gui.DisplayOrder = 60
+    Gui.IgnoreGuiInset = true
+    Gui.Parent = parent
+
+    local Main = Instance.new("Frame", Gui)
+    Main.Name = "Main"
+    Main.AnchorPoint = Vector2.new(0.5, 0.5)
+    Main.Position = UDim2.new(0.5, 0, 0.5, 0)
+    Main.Size = UDim2.new(0, 600, 0, 440)
+    Main.BackgroundColor3 = C.bg
+    Main.BackgroundTransparency = 0.05
+    Main.BorderSizePixel = 0
+    Main.Active = true
+    Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 14)
+    local mStroke = Instance.new("UIStroke", Main)
+    mStroke.Color = C.gold
+    mStroke.Thickness = 1.5
+    mStroke.Transparency = 0.35
+
+    -- arrastar
+    do
+        local dragging, dragStart, startPos
+        Main.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging, dragStart, startPos = true, i.Position, Main.Position
+                i.Changed:Connect(function()
+                    if i.UserInputState == Enum.UserInputState.End then dragging = false end
+                end)
+            end
+        end)
+        UIS.InputChanged:Connect(function(i)
+            if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+                local d = i.Position - dragStart
+                Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+            end
+        end)
+    end
+
+    local function label(p, text, size, color, pos, sz, font)
+        local l = Instance.new("TextLabel", p)
+        l.BackgroundTransparency = 1
+        l.Text = text
+        l.TextSize = size
+        l.TextColor3 = color
+        l.Font = font or Enum.Font.GothamBold
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.TextYAlignment = Enum.TextYAlignment.Top
+        l.Position = pos
+        l.Size = sz
+        return l
+    end
+
+    local function card(pos, sz, title, titleColor)
+        local f = Instance.new("Frame", Main)
+        f.BackgroundColor3 = C.card
+        f.BorderSizePixel = 0
+        f.Position = pos
+        f.Size = sz
+        Instance.new("UICorner", f).CornerRadius = UDim.new(0, 10)
+        local s = Instance.new("UIStroke", f)
+        s.Color = Color3.fromRGB(45, 45, 60)
+        s.Thickness = 1
+        label(f, title, 11, titleColor, UDim2.new(0, 12, 0, 8), UDim2.new(1, -24, 0, 14))
+        return f
+    end
+
+    -- cabeçalho
+    label(Main, BC.Title, 18, C.gold, UDim2.new(0, 18, 0, 14), UDim2.new(0, 220, 0, 22))
+
+    local pill = Instance.new("Frame", Main)
+    pill.BackgroundColor3 = Color3.fromRGB(10, 40, 28)
+    pill.BorderSizePixel = 0
+    pill.Position = UDim2.new(0, 200, 0, 14)
+    pill.Size = UDim2.new(0, 78, 0, 22)
+    Instance.new("UICorner", pill).CornerRadius = UDim.new(1, 0)
+    local pStroke = Instance.new("UIStroke", pill)
+    pStroke.Color = C.green
+    pStroke.Thickness = 1
+    local dot = Instance.new("Frame", pill)
+    dot.BackgroundColor3 = C.green
+    dot.BorderSizePixel = 0
+    dot.Position = UDim2.new(0, 10, 0.5, -3)
+    dot.Size = UDim2.new(0, 6, 0, 6)
+    Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+    local pillText = label(pill, "ACTIVE", 11, C.green, UDim2.new(0, 22, 0, 0), UDim2.new(1, -26, 1, 0))
+    pillText.TextYAlignment = Enum.TextYAlignment.Center
+
+    -- minimizar
+    local MinBtn = Instance.new("TextButton", Main)
+    MinBtn.BackgroundTransparency = 1
+    MinBtn.Text = "—"
+    MinBtn.TextColor3 = C.text
+    MinBtn.TextSize = 18
+    MinBtn.Font = Enum.Font.GothamBold
+    MinBtn.Position = UDim2.new(1, -40, 0, 10)
+    MinBtn.Size = UDim2.new(0, 30, 0, 28)
+
+    -- linha de sessão
+    local Session = Instance.new("Frame", Main)
+    Session.BackgroundColor3 = C.card
+    Session.BorderSizePixel = 0
+    Session.Position = UDim2.new(0, 14, 0, 50)
+    Session.Size = UDim2.new(1, -28, 0, 36)
+    Instance.new("UICorner", Session).CornerRadius = UDim.new(0, 10)
+    local sStroke = Instance.new("UIStroke", Session)
+    sStroke.Color = Color3.fromRGB(45, 45, 60)
+    local avatar = Instance.new("ImageLabel", Session)
+    avatar.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    avatar.Position = UDim2.new(0, 8, 0.5, -12)
+    avatar.Size = UDim2.new(0, 24, 0, 24)
+    Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
+    pcall(function()
+        avatar.Image = Players:GetUserThumbnailAsync(LP.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+    end)
+    local sessionLbl = label(Session, "", 12, C.gold, UDim2.new(0, 42, 0, 0), UDim2.new(1, -52, 1, 0))
+    sessionLbl.TextYAlignment = Enum.TextYAlignment.Center
+    sessionLbl.TextXAlignment = Enum.TextXAlignment.Right
+
+    -- cartões
+    local missionCard = card(UDim2.new(0, 14, 0, 96),  UDim2.new(0.58, -20, 0, 130), "MISSION CONTROL", C.gold)
+    local auxCard     = card(UDim2.new(0.58, 0, 0, 96), UDim2.new(0.42, -14, 0, 62),  "AUXILIARY TASK", C.blue)
+    local engCard     = card(UDim2.new(0.58, 0, 0, 164), UDim2.new(0.42, -14, 0, 62), "ENGINE CONTROLLER", C.green)
+    local lvlCard     = card(UDim2.new(0, 14, 0, 236),  UDim2.new(0.333, -16, 0, 66), "PLAYER LEVEL", C.gold)
+    local beliCard    = card(UDim2.new(0.333, 0, 0, 236), UDim2.new(0.333, -8, 0, 66), "BELI WEALTH", C.gold)
+    local fragCard    = card(UDim2.new(0.666, -6, 0, 236), UDim2.new(0.334, -8, 0, 66), "FRAGMENTS", C.purple)
+    local combatCard  = card(UDim2.new(0, 14, 0, 312),  UDim2.new(1, -28, 0, 114), "COMBAT MASTERY / ARSENAL", C.purple)
+
+    local function body(cardF, size, h)
+        local l = label(cardF, "-", size, C.text, UDim2.new(0, 12, 0, 28), UDim2.new(1, -24, 0, h))
+        l.TextWrapped = true
+        return l
+    end
+    local missionTxt = body(missionCard, 13, 92)
+    local auxTxt     = body(auxCard, 12, 30)
+    local engTxt     = body(engCard, 13, 30)
+    local lvlTxt     = body(lvlCard, 18, 26)
+    local beliTxt    = body(beliCard, 18, 26)
+    local fragTxt    = body(fragCard, 18, 26)
+    local combatTxt  = body(combatCard, 15, 80)
+
+    local fullSize = Main.Size
+    local minimized = false
+    MinBtn.MouseButton1Click:Connect(function()
+        minimized = not minimized
+        for _, ch in ipairs(Main:GetChildren()) do
+            if ch:IsA("Frame") and ch ~= pill then ch.Visible = not minimized end
+        end
+        Main.Size = minimized and UDim2.new(0, 600, 0, 50) or fullSize
+        MinBtn.Text = minimized and "+" or "—"
+    end)
+
+    -- helpers
+    local function commas(n)
+        n = tonumber(n) or 0
+        local s = tostring(math.floor(n))
+        local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+        if out:sub(1, 1) == "," then out = out:sub(2) end
+        return out
+    end
+    local function dur(sec)
+        sec = math.max(0, math.floor(sec))
+        local d = math.floor(sec / 86400)
+        local h = math.floor(sec % 86400 / 3600)
+        local m = math.floor(sec % 3600 / 60)
+        local s = sec % 60
+        return d, h, m, s
+    end
+    local function dataValue(name)
+        local ok, v = pcall(function()
+            return LP.Data[name].Value
+        end)
+        if ok then return v end
+        local pd = ScriptStorage and ScriptStorage.PlayerData
+        if pd then return pd[name] end
+        return nil
+    end
+    local function stripPrefix(t)
+        if type(t) ~= "string" then return "-" end
+        return (t:gsub("^MainTask : ", ""):gsub("^SubTask : ", ""))
+    end
+
+    local startT = tonumber(timeee) or os.time()
+
+    task.spawn(function()
+        while Gui.Parent do
+            pcall(function()
+                local T = (ScriptStorage and ScriptStorage.Task) or {}
+                missionTxt.Text = stripPrefix(T.MainTask)
+                auxTxt.Text = stripPrefix(T.SubTask)
+                engTxt.Text = tostring(CurrentTask or "-")
+
+                lvlTxt.Text  = tostring(dataValue("Level") or 0)
+                beliTxt.Text = "$ " .. commas(dataValue("Beli"))
+                fragTxt.Text = tostring(dataValue("Fragments") or 0)
+
+                local lines = {}
+                local melees = (ScriptStorage and ScriptStorage.Melees) or {}
+                for name, v in pairs(melees) do
+                    if type(v) == "number" and v > 0 then
+                        table.insert(lines, name .. ": " .. tostring(v))
+                    end
+                end
+                table.sort(lines)
+                combatTxt.Text = (#lines > 0) and table.concat(lines, "   |   ") or "-"
+
+                local el = os.time() - startT
+                local _, h, m, s = dur(el)
+                local td, th, tm, ts = dur(el + (tonumber(OldSessionTime) or 0))
+                sessionLbl.Text = string.format("%dhrs, %dmin, %dsec  |  Total: %dday, %dhrs, %dmin, %dsec", h, m, s, td, th, tm, ts)
+            end)
+            task.wait(0.5)
+        end
+    end)
+
+    -- esconde as interfaces antigas
+    if BC.HideOldUI then
+        task.spawn(function()
+            while Gui.Parent do
+                for _, c in ipairs({parent, game:GetService("CoreGui"), PlayerGui}) do
+                    pcall(function()
+                        for _, n in ipairs({"KaitunUI", "Noguchi Ui", "Noguchi Toggle"}) do
+                            local g = c:FindFirstChild(n)
+                            if g and g:IsA("ScreenGui") then g.Enabled = false end
+                        end
+                    end)
+                end
+                task.wait(2)
+            end
+        end)
+    end
+
+    getgenv().BombaCatUI = {Gui = Gui, Main = Main}
+end)
+
 hoangtuveu()
 --============================================================
 -- [EXTRAS] NO ANIMATION + AUTO REDEEM CODES + AUTO RANDOM FRUIT (GACHA)
@@ -6817,287 +7100,4 @@ task.spawn(function()
     end)
 
     getgenv().HexUI = UI
-end)
-
---============================================================
--- BOMBACAT HUB UI (painel de estado)
--- Lê: ScriptStorage.Task (MainTask / SubTask), CurrentTask,
---     LocalPlayer.Data (Level / Beli / Fragments), ScriptStorage.Melees
---============================================================
-task.spawn(function()
-    local BC = {
-        HideOldUI = true,                    -- esconde o KaitunUI e o "Noguchi Ui" antigos
-        Title     = "BOMBACAT HUB",
-        Accent    = Color3.fromRGB(255, 200, 40),
-    }
-
-    local Players = game:GetService("Players")
-    local UIS = game:GetService("UserInputService")
-    local LP = Players.LocalPlayer
-    local PlayerGui = LP:WaitForChild("PlayerGui")
-
-    -- container (CoreGui -> PlayerGui como alternativa)
-    local function getParent()
-        local ok, gui = pcall(function()
-            if gethui then return gethui() end
-            return game:GetService("CoreGui")
-        end)
-        if ok and gui then return gui end
-        return PlayerGui
-    end
-    local parent = getParent()
-
-    for _, c in ipairs({parent, PlayerGui}) do
-        pcall(function()
-            local old = c:FindFirstChild("BombaCat Hub")
-            if old then old:Destroy() end
-        end)
-    end
-
-    local C = {
-        bg     = Color3.fromRGB(8, 8, 14),
-        card   = Color3.fromRGB(6, 6, 10),
-        text   = Color3.fromRGB(255, 255, 255),
-        blue   = Color3.fromRGB(90, 170, 255),
-        green  = Color3.fromRGB(60, 220, 130),
-        purple = Color3.fromRGB(170, 90, 255),
-        gold   = BC.Accent,
-    }
-
-    local Gui = Instance.new("ScreenGui")
-    Gui.Name = "BombaCat Hub"
-    Gui.ResetOnSpawn = false
-    Gui.DisplayOrder = 60
-    Gui.IgnoreGuiInset = true
-    Gui.Parent = parent
-
-    local Main = Instance.new("Frame", Gui)
-    Main.Name = "Main"
-    Main.AnchorPoint = Vector2.new(0.5, 0.5)
-    Main.Position = UDim2.new(0.5, 0, 0.5, 0)
-    Main.Size = UDim2.new(0, 600, 0, 440)
-    Main.BackgroundColor3 = C.bg
-    Main.BackgroundTransparency = 0.05
-    Main.BorderSizePixel = 0
-    Main.Active = true
-    Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 14)
-    local mStroke = Instance.new("UIStroke", Main)
-    mStroke.Color = C.gold
-    mStroke.Thickness = 1.5
-    mStroke.Transparency = 0.35
-
-    -- arrastar
-    do
-        local dragging, dragStart, startPos
-        Main.InputBegan:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-                dragging, dragStart, startPos = true, i.Position, Main.Position
-                i.Changed:Connect(function()
-                    if i.UserInputState == Enum.UserInputState.End then dragging = false end
-                end)
-            end
-        end)
-        UIS.InputChanged:Connect(function(i)
-            if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-                local d = i.Position - dragStart
-                Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
-            end
-        end)
-    end
-
-    local function label(p, text, size, color, pos, sz, font)
-        local l = Instance.new("TextLabel", p)
-        l.BackgroundTransparency = 1
-        l.Text = text
-        l.TextSize = size
-        l.TextColor3 = color
-        l.Font = font or Enum.Font.GothamBold
-        l.TextXAlignment = Enum.TextXAlignment.Left
-        l.TextYAlignment = Enum.TextYAlignment.Top
-        l.Position = pos
-        l.Size = sz
-        return l
-    end
-
-    local function card(pos, sz, title, titleColor)
-        local f = Instance.new("Frame", Main)
-        f.BackgroundColor3 = C.card
-        f.BorderSizePixel = 0
-        f.Position = pos
-        f.Size = sz
-        Instance.new("UICorner", f).CornerRadius = UDim.new(0, 10)
-        local s = Instance.new("UIStroke", f)
-        s.Color = Color3.fromRGB(45, 45, 60)
-        s.Thickness = 1
-        label(f, title, 11, titleColor, UDim2.new(0, 12, 0, 8), UDim2.new(1, -24, 0, 14))
-        return f
-    end
-
-    -- cabeçalho
-    label(Main, BC.Title, 18, C.gold, UDim2.new(0, 18, 0, 14), UDim2.new(0, 220, 0, 22))
-
-    local pill = Instance.new("Frame", Main)
-    pill.BackgroundColor3 = Color3.fromRGB(10, 40, 28)
-    pill.BorderSizePixel = 0
-    pill.Position = UDim2.new(0, 200, 0, 14)
-    pill.Size = UDim2.new(0, 78, 0, 22)
-    Instance.new("UICorner", pill).CornerRadius = UDim.new(1, 0)
-    local pStroke = Instance.new("UIStroke", pill)
-    pStroke.Color = C.green
-    pStroke.Thickness = 1
-    local dot = Instance.new("Frame", pill)
-    dot.BackgroundColor3 = C.green
-    dot.BorderSizePixel = 0
-    dot.Position = UDim2.new(0, 10, 0.5, -3)
-    dot.Size = UDim2.new(0, 6, 0, 6)
-    Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
-    local pillText = label(pill, "ACTIVE", 11, C.green, UDim2.new(0, 22, 0, 0), UDim2.new(1, -26, 1, 0))
-    pillText.TextYAlignment = Enum.TextYAlignment.Center
-
-    -- minimizar
-    local MinBtn = Instance.new("TextButton", Main)
-    MinBtn.BackgroundTransparency = 1
-    MinBtn.Text = "—"
-    MinBtn.TextColor3 = C.text
-    MinBtn.TextSize = 18
-    MinBtn.Font = Enum.Font.GothamBold
-    MinBtn.Position = UDim2.new(1, -40, 0, 10)
-    MinBtn.Size = UDim2.new(0, 30, 0, 28)
-
-    -- linha de sessão
-    local Session = Instance.new("Frame", Main)
-    Session.BackgroundColor3 = C.card
-    Session.BorderSizePixel = 0
-    Session.Position = UDim2.new(0, 14, 0, 50)
-    Session.Size = UDim2.new(1, -28, 0, 36)
-    Instance.new("UICorner", Session).CornerRadius = UDim.new(0, 10)
-    local sStroke = Instance.new("UIStroke", Session)
-    sStroke.Color = Color3.fromRGB(45, 45, 60)
-    local avatar = Instance.new("ImageLabel", Session)
-    avatar.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    avatar.Position = UDim2.new(0, 8, 0.5, -12)
-    avatar.Size = UDim2.new(0, 24, 0, 24)
-    Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
-    pcall(function()
-        avatar.Image = Players:GetUserThumbnailAsync(LP.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
-    end)
-    local sessionLbl = label(Session, "", 12, C.gold, UDim2.new(0, 42, 0, 0), UDim2.new(1, -52, 1, 0))
-    sessionLbl.TextYAlignment = Enum.TextYAlignment.Center
-    sessionLbl.TextXAlignment = Enum.TextXAlignment.Right
-
-    -- cartões
-    local missionCard = card(UDim2.new(0, 14, 0, 96),  UDim2.new(0.58, -20, 0, 130), "MISSION CONTROL", C.gold)
-    local auxCard     = card(UDim2.new(0.58, 0, 0, 96), UDim2.new(0.42, -14, 0, 62),  "AUXILIARY TASK", C.blue)
-    local engCard     = card(UDim2.new(0.58, 0, 0, 164), UDim2.new(0.42, -14, 0, 62), "ENGINE CONTROLLER", C.green)
-    local lvlCard     = card(UDim2.new(0, 14, 0, 236),  UDim2.new(0.333, -16, 0, 66), "PLAYER LEVEL", C.gold)
-    local beliCard    = card(UDim2.new(0.333, 0, 0, 236), UDim2.new(0.333, -8, 0, 66), "BELI WEALTH", C.gold)
-    local fragCard    = card(UDim2.new(0.666, -6, 0, 236), UDim2.new(0.334, -8, 0, 66), "FRAGMENTS", C.purple)
-    local combatCard  = card(UDim2.new(0, 14, 0, 312),  UDim2.new(1, -28, 0, 114), "COMBAT MASTERY / ARSENAL", C.purple)
-
-    local function body(cardF, size, h)
-        local l = label(cardF, "-", size, C.text, UDim2.new(0, 12, 0, 28), UDim2.new(1, -24, 0, h))
-        l.TextWrapped = true
-        return l
-    end
-    local missionTxt = body(missionCard, 13, 92)
-    local auxTxt     = body(auxCard, 12, 30)
-    local engTxt     = body(engCard, 13, 30)
-    local lvlTxt     = body(lvlCard, 18, 26)
-    local beliTxt    = body(beliCard, 18, 26)
-    local fragTxt    = body(fragCard, 18, 26)
-    local combatTxt  = body(combatCard, 15, 80)
-
-    local fullSize = Main.Size
-    local minimized = false
-    MinBtn.MouseButton1Click:Connect(function()
-        minimized = not minimized
-        for _, ch in ipairs(Main:GetChildren()) do
-            if ch:IsA("Frame") and ch ~= pill then ch.Visible = not minimized end
-        end
-        Main.Size = minimized and UDim2.new(0, 600, 0, 50) or fullSize
-        MinBtn.Text = minimized and "+" or "—"
-    end)
-
-    -- helpers
-    local function commas(n)
-        n = tonumber(n) or 0
-        local s = tostring(math.floor(n))
-        local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
-        if out:sub(1, 1) == "," then out = out:sub(2) end
-        return out
-    end
-    local function dur(sec)
-        sec = math.max(0, math.floor(sec))
-        local d = math.floor(sec / 86400)
-        local h = math.floor(sec % 86400 / 3600)
-        local m = math.floor(sec % 3600 / 60)
-        local s = sec % 60
-        return d, h, m, s
-    end
-    local function dataValue(name)
-        local ok, v = pcall(function()
-            return LP.Data[name].Value
-        end)
-        if ok then return v end
-        local pd = ScriptStorage and ScriptStorage.PlayerData
-        if pd then return pd[name] end
-        return nil
-    end
-    local function stripPrefix(t)
-        if type(t) ~= "string" then return "-" end
-        return (t:gsub("^MainTask : ", ""):gsub("^SubTask : ", ""))
-    end
-
-    local startT = tonumber(timeee) or os.time()
-    local oldT = tonumber(OldSessionTime) or 0
-
-    task.spawn(function()
-        while Gui.Parent do
-            pcall(function()
-                local T = (ScriptStorage and ScriptStorage.Task) or {}
-                missionTxt.Text = stripPrefix(T.MainTask)
-                auxTxt.Text = stripPrefix(T.SubTask)
-                engTxt.Text = tostring(CurrentTask or "-")
-
-                lvlTxt.Text  = tostring(dataValue("Level") or 0)
-                beliTxt.Text = "$ " .. commas(dataValue("Beli"))
-                fragTxt.Text = tostring(dataValue("Fragments") or 0)
-
-                local lines = {}
-                local melees = (ScriptStorage and ScriptStorage.Melees) or {}
-                for name, v in pairs(melees) do
-                    if type(v) == "number" and v > 0 then
-                        table.insert(lines, name .. ": " .. tostring(v))
-                    end
-                end
-                table.sort(lines)
-                combatTxt.Text = (#lines > 0) and table.concat(lines, "   |   ") or "-"
-
-                local el = os.time() - startT
-                local _, h, m, s = dur(el)
-                local td, th, tm, ts = dur(el + oldT)
-                sessionLbl.Text = string.format("%dhrs, %dmin, %dsec  |  Total: %dday, %dhrs, %dmin, %dsec", h, m, s, td, th, tm, ts)
-            end)
-            task.wait(0.5)
-        end
-    end)
-
-    -- esconde as interfaces antigas
-    if BC.HideOldUI then
-        task.spawn(function()
-            while Gui.Parent do
-                for _, c in ipairs({parent, game:GetService("CoreGui"), PlayerGui}) do
-                    pcall(function()
-                        for _, n in ipairs({"KaitunUI", "Noguchi Ui", "Noguchi Toggle"}) do
-                            local g = c:FindFirstChild(n)
-                            if g and g:IsA("ScreenGui") then g.Enabled = false end
-                        end
-                    end)
-                end
-                task.wait(2)
-            end
-        end)
-    end
-
-    getgenv().BombaCatUI = {Gui = Gui, Main = Main}
 end)
