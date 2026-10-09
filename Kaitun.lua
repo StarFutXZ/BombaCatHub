@@ -32,7 +32,202 @@ function V1Show(txt)
         _V1DiagLabel.Text = " " .. txt
     end)
 end
-V1Show("[Kaitun darkstep-fix3] ficheiro novo carregado — a iniciar...")
+V1Show("[Kaitun darkstep-fix4] ficheiro novo carregado — a iniciar...")
+
+-- ============================================================
+-- DARK STEP / ELECTRO AUTO-BUY — módulo INDEPENDENTE (darkstep-fix4)
+-- Não usa o dispatcher de tarefas, o TweenController nem o BuyMelee do script:
+-- lê o Beli diretamente do jogo, voa até ao professor e chama o remote de compra.
+-- Pausa o farm (_G.Stop) só enquanto compra.  Teste manual: getgenv().BuyDarkStepNow()
+-- ============================================================
+V1Standalone = true
+V1OwnStop = false
+do
+    local forceNow = false
+    getgenv().BuyDarkStepNow = function() forceNow = true end
+
+    task.spawn(function()
+        local Players = game:GetService("Players")
+        local RS = game:GetService("ReplicatedStorage")
+        local TS = game:GetService("TweenService")
+        local RunService = game:GetService("RunService")
+        local LP = Players.LocalPlayer
+        local BUILD = "darkstep-fix4"
+
+        local STYLES = {
+            {name = "Black Leg", key = "BuyBlackLeg", price = 150000, teacher = "Dark Step Teacher", prev = nil,
+             locs = {[1] = Vector3.new(-983.62, 12.44, 3990.46), [2] = Vector3.new(-4752.44, 33.92, -4848.04), [3] = Vector3.new(-5045.61, 370.01, -3182.31)}},
+            {name = "Electro", key = "BuyElectro", price = 500000, teacher = "Mad Scientist", prev = "Black Leg",
+             locs = {[1] = Vector3.new(-5382.79, 12.55, -2148.82), [2] = Vector3.new(-4866.16, 33.92, -4767.11), [3] = Vector3.new(-4996.06, 313.21, -3201.83)}},
+        }
+
+        local function sea()
+            if SeaIndex then return SeaIndex end
+            local id = game.PlaceId
+            if id == 2753915549 or id == 85211729168715 then return 1 end
+            if id == 4442272183 or id == 79091703265657 then return 2 end
+            if id == 7449423635 or id == 100117331123089 then return 3 end
+            return 1
+        end
+        local function getTool(name)
+            for _, c in ipairs({LP:FindFirstChild("Backpack"), LP.Character}) do
+                if c then
+                    local t = c:FindFirstChild(name)
+                    if t and t:IsA("Tool") then return t end
+                end
+            end
+            return nil
+        end
+        local function mastery(name)
+            local t = getTool(name)
+            local lv = t and t:FindFirstChild("Level")
+            if lv then return lv.Value end
+            return (ScriptStorage and ScriptStorage.Melees and ScriptStorage.Melees[name]) or 0
+        end
+        local function getBeli()
+            local d = LP:FindFirstChild("Data")
+            local b = d and d:FindFirstChild("Beli")
+            return b and b.Value or 0
+        end
+        local function teacherPos(st)
+            local fallback = st.locs[sea()] or st.locs[1]
+            local npcs = RS:FindFirstChild("NPCs")
+            local m = npcs and npcs:FindFirstChild(st.teacher)
+            if m then
+                local ok, cf = pcall(function() return m:GetModelCFrame() end)
+                if ok and cf and (cf.Position - fallback).Magnitude < 3000 then return cf.Position end
+            end
+            return fallback
+        end
+
+        -- voa até pos (TweenService no HumanoidRootPart, com noclip e sem cair)
+        local function travel(pos)
+            local char = LP.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp then return false end
+            local hover = Instance.new("BodyVelocity")
+            hover.Name = "V1Hover"
+            hover.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+            hover.Velocity = Vector3.zero
+            hover.Parent = hrp
+            local noclip = RunService.Stepped:Connect(function()
+                local c = LP.Character
+                if c then
+                    for _, p in ipairs(c:GetChildren()) do
+                        if p:IsA("BasePart") and p.CanCollide then p.CanCollide = false end
+                    end
+                end
+            end)
+            local target = CFrame.new(pos + Vector3.new(0, 3, 0))
+            local dist = (hrp.Position - target.Position).Magnitude
+            local speed = (Config and Config.Configuration and Config.Configuration.TweenSpeed) or 250
+            local dur = math.max(dist / speed, 0.1)
+            local tw = TS:Create(hrp, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = target})
+            tw:Play()
+            local t0 = os.clock()
+            local arrived = false
+            while os.clock() - t0 < dur + 10 do
+                task.wait(0.1)
+                local c = LP.Character
+                local h = c and c:FindFirstChild("HumanoidRootPart")
+                local hum = c and c:FindFirstChildOfClass("Humanoid")
+                if not h or not hum or hum.Health <= 0 then break end
+                local left = (h.Position - target.Position).Magnitude
+                if left <= 6 then arrived = true break end
+                V1Show(string.format("[V1 %s] a voar até ao professor... faltam %d studs", BUILD, math.floor(left)))
+            end
+            pcall(function() tw:Cancel() end)
+            noclip:Disconnect()
+            hover:Destroy()
+            return arrived
+        end
+
+        local function purchase(st)
+            local prevStop = _G.Stop
+            V1OwnStop = true
+            _G.Stop = true          -- pausa o dispatcher do farm
+            TweenDebounce = true    -- o TweenController do farm deixa de mexer no personagem
+            local function release()
+                TweenDebounce = false
+                _G.Stop = prevStop
+                V1OwnStop = false
+            end
+            local okAll, resultMsg = pcall(function()
+                V1Show(string.format("[V1 %s] a pausar o farm para comprar %s...", BUILD, st.name))
+                pcall(function() if TweenInstance then TweenInstance:Cancel() end end)
+                shouldTween = false
+                task.wait(2.5) -- deixa terminar o ataque em curso
+                pcall(function() if TweenInstance then TweenInstance:Cancel() end end)
+                shouldTween = false
+
+                local pos = teacherPos(st)
+                if not travel(pos) then
+                    return "não cheguei ao professor de " .. st.name
+                end
+                local CommF = RS:WaitForChild("Remotes"):WaitForChild("CommF_")
+                local last
+                for attempt = 1, 3 do
+                    pcall(function() last = CommF:InvokeServer(st.key) end)
+                    task.wait(1)
+                    if getTool(st.name) then return nil end
+                    V1Show(string.format("[V1 %s] tentativa %d de comprar %s | resposta do servidor=%s | Beli=%s",
+                        BUILD, attempt, st.name, tostring(last), tostring(getBeli())))
+                end
+                return "servidor respondeu " .. tostring(last) .. " ao comprar " .. st.name
+            end)
+            release()
+            if not okAll then return "erro: " .. tostring(resultMsg) end
+            return resultMsg
+        end
+
+        repeat task.wait(1) until game:IsLoaded() and LP.Character and LP:FindFirstChild("Data") and LP.Data:FindFirstChild("Beli")
+        local busy, cooldown = false, 0
+        while task.wait(1) do
+            local ok, err = pcall(function()
+                local st
+                for _, s in ipairs(STYLES) do
+                    if not getTool(s.name) then st = s break end
+                end
+                if not st then
+                    V1Show("[V1 " .. BUILD .. "] Dark Step e Electro já comprados ✅")
+                    return
+                end
+                local beli = getBeli()
+                local switchAt = (Config and Config.Melee and Config.Melee.SwitchAtMastery) or 400
+                local char = LP.Character
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                local reason
+                if os.time() < cooldown then reason = "a esperar " .. (cooldown - os.time()) .. "s após falha"
+                elseif not hum or hum.Health <= 0 then reason = "personagem morto"
+                elseif st.prev and mastery(st.prev) < switchAt then reason = "à espera de " .. st.prev .. " " .. mastery(st.prev) .. "/" .. switchAt .. " de mestria"
+                elseif beli < st.price then reason = "Beli " .. beli .. "/" .. st.price
+                end
+                if forceNow then reason = nil end
+                V1Show(string.format("[V1 %s] próximo: %s | Beli=%s | Sea=%s | %s", BUILD, st.name, tostring(beli), tostring(sea()), reason or "A COMPRAR"))
+                if reason or busy then return end
+
+                forceNow = false
+                busy = true
+                local failMsg = purchase(st)
+                busy = false
+                if failMsg then
+                    cooldown = os.time() + 15
+                    V1Show("[V1 " .. BUILD .. "] ❌ falhou: " .. failMsg)
+                    print("[V1] falhou:", failMsg)
+                else
+                    V1Show("[V1 " .. BUILD .. "] ✅ Comprou " .. st.name .. "!")
+                    print("[V1] comprou", st.name)
+                    task.wait(3)
+                end
+            end)
+            if not ok then
+                busy = false
+                V1Show("[V1 " .. BUILD .. "] ERRO: " .. tostring(err))
+            end
+        end
+    end)
+end
+
 
 Config = {
     Team = "Pirates",
@@ -2327,6 +2522,19 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     -- "buy"  = o próximo estilo já pode ser comprado agora
     -- "wait" = falta dinheiro ou a mestria do estilo anterior
     -- nil    = os 3 já estão comprados
+    -- Próximo estilo V1 ainda não comprado (Black Leg -> Electro -> Fishman Karate), ou nil
+    function V1NextName()
+        for _, n in ipairs({"Black Leg", "Electro", "Fishman Karate"}) do
+            if not CheckItem(n) then return n end
+        end
+        return nil
+    end
+    -- true se o módulo independente (topo do ficheiro) é quem trata este estilo
+    function V1HandledByModule()
+        local nx = V1NextName()
+        return V1Standalone and (nx == "Black Leg" or nx == "Electro")
+    end
+
     -- Beli com fallback direto para LocalPlayer.Data.Beli (caso PlayerData ainda não tenha a chave)
     function V1Beli()
         local b = ScriptStorage and ScriptStorage.PlayerData and ScriptStorage.PlayerData.Beli
@@ -2422,16 +2630,11 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         return true
     end
 
-    -- Teste manual (consola do executor):  getgenv().BuyDarkStepNow()
-    getgenv().BuyDarkStepNow = function()
-        print("[Melee] teste manual: a comprar Black Leg (Dark Step) já")
-        return V1DoBuy("Black Leg", true)
-    end
-
     V1LastHookAt = 0
     V1OwnStop = false
     function V1BuyOverride()
         V1LastHookAt = os.clock()
+        if V1HandledByModule() then return false end
         if not (Config.Items and Config.Items.AutoFullyMelees and Config.Melee and Config.Melee.AutoBuy) then
             V1Show("[V1 " .. V1_BUILD .. "] desligado na config (AutoFullyMelees/AutoBuy)")
             return false
@@ -2468,6 +2671,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         local busy = false
         while task.wait(1) do
             local ok, err = pcall(function()
+                if V1HandledByModule() then return end -- o módulo independente trata disto
                 if os.clock() - V1LastHookAt < 5 then return end -- o hook normal está vivo: ele trata de tudo
                 if not (ScriptStorage and ScriptStorage.PlayerData and ScriptStorage.PlayerData.Level) then
                     V1Show("[V1 " .. V1_BUILD .. " THREAD] a aguardar dados do jogador...")
@@ -2503,6 +2707,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         -- [REMOVIDO] limite de Level >= 200: Dark Step/Electro/Fishman só precisam de dinheiro.
         -- Estilos V1 só com Beli: só devolve true quando o próximo já se pode comprar
         -- (senão deixa o LevelFarm correr para ganhar o dinheiro, em vez de ficar preso aqui).
+        if V1HandledByModule() then return nil end -- Dark Step/Electro: compra o módulo independente
         local v1 = V1MeleeStatus()
         if v1 == "buy" then return true end
         if v1 == "wait" then return nil end
