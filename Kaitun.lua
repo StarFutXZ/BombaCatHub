@@ -1721,10 +1721,9 @@ end
                     if block and block.Parent == workspace then
                         local b = a.Character and a.Character.PrimaryPart
                         if b and (b.Position - block.Position).Magnitude <= 250 then
-                            -- Sincronizar no Heartbeat em vez de task.wait() para reduzir os solavancos.
+                            -- Seguir o tween no Heartbeat sem anular a velocidade física
+                            -- a cada frame, o que pode deixar o movimento preso/arrastado.
                             b.CFrame = block.CFrame
-                            b.AssemblyLinearVelocity = Vector3.zero
-                            b.AssemblyAngularVelocity = Vector3.zero
                         elseif b then
                             block.CFrame = b.CFrame
                         end
@@ -1863,11 +1862,8 @@ end
             return
         end
 
-        -- [FIXED - theo yêu cầu boss man: "chỉnh lên 160 cho nhanh ko vượt
-        -- quá 160"] Bỏ hẳn bảng 110/100 cũ — dùng 1 mức tốc độ CỐ ĐỊNH 160
-        -- (giống tween của main_red_magic_beta.txt, chỉ đổi số chia 300 →
-        -- 160 để nhanh hơn), không có mức nào vượt quá con số này.
-        local divisor = 300 -- velocidade maior; sincronização no Heartbeat ajuda a manter o movimento fluido
+        -- O tempo do tween é distância / divisor; divisor maior significa viagem mais rápida.
+        local divisor = 160
         local duration = dist / divisor
 
         -- [FIXED - port tween từ main_red_magic_beta.txt] Tween "block"
@@ -6163,23 +6159,43 @@ task.spawn(function()
     -- AUTO REDEEM CODES
     task.spawn(function()
         if not Config.Extras.AutoRedeemCodes then return end
-        -- Códigos de EXP verificados em listas atualizadas em outubro de 2026.
-        -- Os códigos são de utilização única por conta; o jogo pode rejeitar
-        -- os já resgatados ou entretanto expirados.
+
+        -- Códigos de 2x EXP listados como ativos em outubro de 2026.
+        -- 1lostadmin exige um espaço no final, conforme algumas listas.
         local REDEEM_CODES = {
-            "SUB2GAMERROBOT_EXP1", "EASTEREXP", "LIGHTNINGABUSE",
-            "Axiore", "TheGreatAce", "Sub2Fer999", "Enyu_is_Pro", "JCWK",
-            "StarcodeHEO", "MagicBUS", "KittGaming", "Sub2CaptainMaui",
-            "Sub2OfficialNoobie", "Sub2NoobMaster123", "Sub2Daigrock",
-            "StrawHatMaine", "TantaiGaming", "Bluxxy",
-            "fudd10", "fudd10_V2", "Chandler", "BIGNEWS", "KITT_RESET",
-            "Sub2UncleKizaru", "SUB2GAMERROBOT_RESET1",
+            "SUB2GAMERROBOT_EXP1",
+            "EASTEREXP",
+            "LIGHTNINGABUSE",
+            "Axiore",
+            "TheGreatAce",
+            "Sub2Fer999",
+            "Enyu_is_Pro",
+            "JCWK",
+            "StarcodeHEO",
+            "MagicBUS",
+            "KittGaming",
+            "Sub2CaptainMaui",
+            "Sub2OfficialNoobie",
+            "Sub2NoobMaster123",
+            "Sub2Daigrock",
+            "StrawHatMaine",
+            "TantaiGaming",
+            "Bluxxy",
+            "1lostadmin ",
         }
 
-        local remotes = game:GetService("ReplicatedStorage"):WaitForChild("Remotes")
-        local commF = remotes:FindFirstChild("CommF_") or remotes:WaitForChild("CommF_", 10)
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local Players = game:GetService("Players")
+        local player = Players.LocalPlayer
+
+        -- Espera o jogo e os remotes acabarem de carregar antes de enviar pedidos.
+        if not game:IsLoaded() then game.Loaded:Wait() end
+        task.wait(8)
+
+        local remotes = ReplicatedStorage:WaitForChild("Remotes", 30)
+        local commF = remotes and (remotes:FindFirstChild("CommF_") or remotes:WaitForChild("CommF_", 15))
         if not commF then
-            warn("[BombaCat Hub] AutoRedeem: Remote CommF_ não encontrado; códigos não enviados.")
+            warn("[BombaCat Hub] AutoRedeem: CommF_ não encontrado. Não foi possível enviar os códigos.")
             return
         end
 
@@ -6187,12 +6203,12 @@ task.spawn(function()
             local ok, result = pcall(function()
                 return commF:InvokeServer("Redeem", code)
             end)
-            if not ok then
-                warn("[BombaCat Hub] Falha ao tentar resgatar código:", code, result)
-            elseif type(result) == "string" then
-                print("[BombaCat Hub] Código", code, "->", result)
+            if ok then
+                print("[BombaCat Hub] Resposta do código [" .. code .. "]:", result == nil and "sem resposta do servidor" or tostring(result))
+            else
+                warn("[BombaCat Hub] Erro ao enviar código [" .. code .. "]:", tostring(result))
             end
-            task.wait(0.8)
+            task.wait(1.2)
         end
     end)
 
