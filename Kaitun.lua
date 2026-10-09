@@ -1960,7 +1960,19 @@ end
     task.spawn(function()
         while task.wait(.06) do if _G.FastAttack == os.time() then pcall(function() h:Attack() end) end end
     end)
-function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
+-- Ataque normal pela ferramenta equipada; evita disparar o RegisterHit customizado
+-- que podia ser rejeitado pelo servidor e deixar os NPCs sem perder vida.
+local _lastToolAttack = 0
+function W.Attack(target)
+    local now = os.clock()
+    if now - _lastToolAttack < 0.12 then return end
+    _lastToolAttack = now
+    pcall(function()
+        local character = game.Players.LocalPlayer.Character
+        local tool = character and character:FindFirstChildOfClass("Tool")
+        if tool then tool:Activate() end
+    end)
+end
 
     CombatController = {GRAB = false, GRAB_DISTANCE = SeaIndex == 1 and 250 or 350, MAX_ATTACK_DURATION = 2, MAX_ATTACK_DURATION_2 = 60, LEVITATE_TIME = 0, CurrentIndex = 1}
 
@@ -2102,7 +2114,9 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
                         if MonResult.Name == "Don Swan" then Storage:Set("SwanDefeated", true) end
                         break
                     end
-                    TweenController.Create(CaculateCircreDirection(p.CFrame) + Vector3.new(0, 35, 0))
+                    -- Aproximação fixa ao NPC: não usar CaculateCircreDirection,
+                    -- pois essa função move o jogador em círculo à volta do alvo.
+                    TweenController.Create(p.Position + Vector3.new(0, 5, 0))
                     if CaculateDistance(p.Position + Vector3.new(0, 35, 0)) < 150 then
                         y = D and D()
                         CombatController.Grab(L or '')
