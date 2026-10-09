@@ -6129,6 +6129,31 @@ end
         end)
     end
 
+    -- ============================================================
+    -- VÒNG LẶP CHÍNH
+    -- ============================================================
+    while task.wait() do
+        if Config.Configuration.HopWhenIdle and LastIdling and os.time() - LastIdling > 300.0 then
+            SetTask('MainTask', "Rejoining due idle in 10 min!")
+            task.wait(1)
+            while task.wait() do game:GetService('TeleportService'):Teleport(game.PlaceId) end
+        end
+        if not AnimationDelay or os.time() - AnimationDelay > 60 then
+            AnimationDelay = os.time()
+        end
+        if ScriptStorage.PlayerData.Level and ScriptStorage.PlayerData.Level > 0 then
+            local J, r = xpcall(RefreshTasksData, debug.traceback)
+            if not J then 
+                print('[ Error ]', r)
+                task.wait(1)
+            end
+        else
+            task.wait(1)
+            pcall(RefreshPlayerData)
+        end
+    end
+end
+
 --============================================================
 -- [EXTRAS] NO ANIMATION + AUTO REDEEM CODES + AUTO RANDOM FRUIT (GACHA)
 -- Opções (pode editar/desligar):
@@ -6277,33 +6302,6 @@ task.spawn(function()
         Check = function() return GachaCall("Check") end,
     }
 end)
-
-
-    -- ============================================================
-    -- VÒNG LẶP CHÍNH
-    -- ============================================================
-    while task.wait() do
-        if Config.Configuration.HopWhenIdle and LastIdling and os.time() - LastIdling > 300.0 then
-            SetTask('MainTask', "Rejoining due idle in 10 min!")
-            task.wait(1)
-            while task.wait() do game:GetService('TeleportService'):Teleport(game.PlaceId) end
-        end
-        if not AnimationDelay or os.time() - AnimationDelay > 60 then
-            AnimationDelay = os.time()
-        end
-        if ScriptStorage.PlayerData.Level and ScriptStorage.PlayerData.Level > 0 then
-            local J, r = xpcall(RefreshTasksData, debug.traceback)
-            if not J then 
-                print('[ Error ]', r)
-                task.wait(1)
-            end
-        else
-            task.wait(1)
-            pcall(RefreshPlayerData)
-        end
-    end
-end
-
 
 --============================================================
 -- [VOID ATTACK] ATAQUE ENVIADO PELO USUARIO
