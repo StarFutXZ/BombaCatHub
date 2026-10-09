@@ -87,20 +87,19 @@ do
         local function getBeli()
             local d = LP:FindFirstChild("Data")
             local b = d and d:FindFirstChild("Beli")
-            if b then return b.Value or 0 end
-            local ls = LP:FindFirstChild("leaderstats")
-            local lb = ls and (ls:FindFirstChild("Beli") or ls:FindFirstChild("Money"))
-            if lb then return lb.Value or 0 end
-            local pd = ScriptStorage and ScriptStorage.PlayerData
-            return (pd and pd.Beli) or 0
+            return b and b.Value or 0
         end
         local function teacherPos(st)
             local fallback = st.locs[sea()] or st.locs[1]
-            local npcs = RS:FindFirstChild("NPCs")
-            local m = npcs and npcs:FindFirstChild(st.teacher)
-            if m then
-                local ok, cf = pcall(function() return m:GetModelCFrame() end)
-                if ok and cf and (cf.Position - fallback).Magnitude < 3000 then return cf.Position end
+            for _, folder in ipairs({workspace:FindFirstChild("NPCs"), RS:FindFirstChild("NPCs")}) do
+                local m = folder and folder:FindFirstChild(st.teacher)
+                if m then
+                    local ok, pos = pcall(function() return m:GetPivot().Position end)
+                    if not ok or not pos then
+                        ok, pos = pcall(function() return m:GetModelCFrame().Position end)
+                    end
+                    if ok and pos and (pos - fallback).Magnitude < 3000 then return pos end
+                end
             end
             return fallback
         end
@@ -172,7 +171,9 @@ do
                 local CommF = RS:WaitForChild("Remotes"):WaitForChild("CommF_")
                 local last
                 for attempt = 1, 3 do
-                    pcall(function() last = CommF:InvokeServer(st.key) end)
+                    pcall(function() CommF:InvokeServer(st.key, true) end) -- passo 1 (check), como no BuyMelee
+                    task.wait(0.4)
+                    pcall(function() last = CommF:InvokeServer(st.key) end) -- passo 2 (compra)
                     task.wait(1)
                     if getTool(st.name) then return nil end
                     V1Show(string.format("[V1 %s] tentativa %d de comprar %s | resposta do servidor=%s | Beli=%s",
@@ -185,13 +186,8 @@ do
             return resultMsg
         end
 
-        repeat
-            task.wait(1)
-            V1Show("[V1 " .. BUILD .. "] a esperar: jogo=" .. tostring(game:IsLoaded()) .. " personagem=" .. tostring(LP.Character ~= nil))
-        until game:IsLoaded() and LP.Character
-        V1Show("[V1 " .. BUILD .. "] módulo ativo — a vigiar o Beli")
-        local busy, cooldown, lastPrint = false, 0, 0
-        task.wait(5) -- deixa o jogo carregar os dados do jogador
+        repeat task.wait(1) until game:IsLoaded() and LP.Character and LP:FindFirstChild("Data") and LP.Data:FindFirstChild("Beli")
+        local busy, cooldown = false, 0
         while task.wait(1) do
             local ok, err = pcall(function()
                 local st
@@ -213,10 +209,6 @@ do
                 elseif beli < st.price then reason = "Beli " .. beli .. "/" .. st.price
                 end
                 if forceNow then reason = nil end
-                if os.clock() - lastPrint > 10 then
-                    lastPrint = os.clock()
-                    print("[V1] próximo=" .. st.name .. " Beli=" .. tostring(beli) .. " preço=" .. st.price .. " -> " .. (reason or "A COMPRAR"))
-                end
                 V1Show(string.format("[V1 %s] próximo: %s | Beli=%s | Sea=%s | %s", BUILD, st.name, tostring(beli), tostring(sea()), reason or "A COMPRAR"))
                 if reason or busy then return end
 
@@ -246,7 +238,7 @@ end
 Config = {
     Team = "Pirates",
     Configuration = {
-        TweenSpeed = 250, -- velocidade do voo em studs/s (antes 160). Se der kick/anti-cheat, baixa para 200
+        TweenSpeed = 350, -- velocidade do voo em studs/s (antes 250). Se der kick/anti-cheat, baixa para 250
         HopWhenIdle = true,
         AutoHop = true,
         AutoHopDelay = 60 * 60,
@@ -295,6 +287,7 @@ Config = {
     },
     AutoKen = true,
     BringMobs = true,
+    BringRadius = 80, -- só puxa mobs do MESMO nome do alvo e que estejam a <= este raio (studs) à volta dele
     -- Só ataca bosses (BossesTask/SpecialBossesTask) quando precisa mesmo do que eles dão.
     -- BossAlwaysKill: bosses que queres matar sempre, ex.: {["Core"] = true, ["Katakuri"] = true}
     BossOnlyIfNeeded = true,
@@ -1563,6 +1556,25 @@ end
         if LocalPlayer.Character:FindFirstChild("HasBuso") then return end
         Remotes.CommF_:InvokeServer("Buso")
     end)
+    -- [NOVO] de tempo em tempo confirma que o Haki de armamento está ligado; se foi desligado, volta a ligar.
+    do
+        local busoSpawnAt = os.clock()
+        game.Players.LocalPlayer.CharacterAdded:Connect(function() busoSpawnAt = os.clock() end)
+        task.spawn(function()
+            while task.wait(4) do
+                pcall(function()
+                    if Config.AutoBuso == false then return end
+                    if os.clock() - busoSpawnAt < 8 then return end -- deixa a rotina do spawn tratar disto primeiro
+                    local char = game.Players.LocalPlayer.Character
+                    local hum = char and char:FindFirstChildOfClass("Humanoid")
+                    if not hum or hum.Health <= 0 or not char:FindFirstChild("HumanoidRootPart") then return end
+                    if char:FindFirstChild("HasBuso") then return end
+                    Remotes.CommF_:InvokeServer("Buso")
+                    task.wait(1.5)
+                end)
+            end
+        end)
+    end
     print(1)
 
     -- ============================================================
@@ -1928,6 +1940,15 @@ end
     block.CanCollide = false
     block.CanTouch = false
     block.Transparency = 1
+    -- [NOVO voo] o "block" é movido à mão em cada Heartbeat em direção ao destino (sem recriar tweens).
+    -- Mudar de destino só muda o alvo: sem reinícios, sem frames parados, sem travadas.
+    KaitunFly = {target = nil, speed = 350} -- global de propósito: o script está perto do limite de 200 locals do Luau
+    KaitunFly.handle = {PlaybackState = Enum.PlaybackState.Completed}
+    function KaitunFly.handle:Cancel()
+        KaitunFly.target = nil
+        shouldTween = false
+        self.PlaybackState = Enum.PlaybackState.Cancelled
+    end
     do
         local blockfind = workspace:FindFirstChild(block.Name)
         if blockfind and blockfind ~= block then blockfind:Destroy() end
@@ -1969,16 +1990,31 @@ end
             if root and block then block.CFrame = root.CFrame end
         end)
         local lastOn, lastRefresh = nil, 0
-        RunService.Heartbeat:Connect(function()
+        RunService.Heartbeat:Connect(function(dt)
             pcall(function()
                 local c = a.Character
                 local on = shouldTween and true or false
+                if on and KaitunFly.target and block and block.Parent == workspace then
+                    local step = math.min(dt or 0.016, 0.1) * (KaitunFly.speed or 350)
+                    local cur = block.Position
+                    local diff = KaitunFly.target - cur
+                    local rot = block.CFrame - cur
+                    if diff.Magnitude <= step then
+                        block.CFrame = CFrame.new(KaitunFly.target) * rot
+                        KaitunFly.target = nil
+                        shouldTween = false
+                        KaitunFly.handle.PlaybackState = Enum.PlaybackState.Completed
+                    else
+                        block.CFrame = CFrame.new(cur + diff.Unit * step) * rot
+                    end
+                end
                 if on then
                     if block and block.Parent == workspace then
                         local b = c and c.PrimaryPart
                         if b then
                             if (b.Position - block.Position).Magnitude <= 200 then
                                 b.CFrame = block.CFrame
+                                b.AssemblyLinearVelocity = Vector3.zero
                             else
                                 block.CFrame = b.CFrame
                             end
@@ -2066,17 +2102,7 @@ end
     function TweenController.Create(W)
         if not W or TweenDebounce then return end
         local a = typeof(W) ~= 'CFrame' and ConvertTo(CFrame, W) or W
-        -- [FIXED - voo sem travadas] se já está a voar para (quase) o mesmo destino, não reinicia o tween
-        do
-            local ch = game.Players.LocalPlayer.Character
-            local root = ch and ch:FindFirstChild("HumanoidRootPart")
-            if shouldTween and TweenInstance and TweenTarget and TweenInstance.PlaybackState == Enum.PlaybackState.Playing
-                and (TweenTarget - a.Position).Magnitude < 3
-                and root and (root.Position - block.Position).Magnitude < 60 then
-                return
-            end
-        end
-        if TweenInstance then pcall(function() TweenInstance:Cancel() end) end
+        -- [NOVO voo] já não há tween para cancelar/recriar: só se atualiza o destino (ver KaitunFly no topo do controlador)
         local character = game.Players.LocalPlayer.Character
         local hrp = character and character:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
@@ -2115,6 +2141,8 @@ end
         local dist = CaculateDistance(hrp.CFrame, a)
 
         if dist <= 5 then
+            KaitunFly.target = nil
+            shouldTween = false
             hrp.CFrame = a
             block.CFrame = a
             return
@@ -2130,18 +2158,16 @@ end
         -- [FIXED - port tween từ main_red_magic_beta.txt] Tween "block"
         -- (Part vô hình) thay vì tween thẳng hrp — nhân vật tự bám theo
         -- block qua vòng lặp sync đã thêm ở trên (getgenv().OnFarm).
-        shouldTween = true
+        -- se ainda não estava a voar, o block começa na posição real do personagem; se já voava, continua (sem reinício)
+        if not (shouldTween and KaitunFly.target) then
+            block.CFrame = hrp.CFrame
+        end
+        KaitunFly.speed = divisor
+        KaitunFly.target = a.Position
         TweenTarget = a.Position
-        local thisTween = Services.TweenService:Create(block, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = a})
-        TweenInstance = thisTween
-        thisTween.Completed:Connect(function()
-            -- só limpa se este ainda for o tween atual (um tween novo não é afetado)
-            if TweenInstance == thisTween then shouldTween = false end
-        end)
-        -- começa sempre a partir da posição real do personagem (evita o block ficar com posição antiga
-        -- e o personagem ficar parado/lento à espera de o tween chegar perto dele)
-        block.CFrame = hrp.CFrame
-        thisTween:Play()
+        TweenInstance = KaitunFly.handle
+        KaitunFly.handle.PlaybackState = Enum.PlaybackState.Playing
+        shouldTween = true
     end
 
     -- ============================================================
@@ -2257,7 +2283,9 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             for _, v in next, enemyFolder:GetChildren() do
                 if v.Name == Mon.Name and _bmAlive(v) then
                     local hrp = v.HumanoidRootPart
-                    if _bmOwner(hrp) and (hrp.Position - myRoot.Position).Magnitude <= BRING_DISTANCE then
+                    if _bmOwner(hrp) and (hrp.Position - myRoot.Position).Magnitude <= BRING_DISTANCE
+                        and (hrp.Position - TargetPos.Position).Magnitude <= (Config.BringRadius or 80)
+                        and not v:GetAttribute("IgnoreGrab") then
                         pcall(function()
                             for _, a in pairs(v:GetChildren()) do
                                 if a:IsA("BasePart") then
@@ -3834,7 +3862,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
         if ScriptStorage.Backpack.Saber or CheckItem("Saber") then return end
         if ScriptStorage.PlayerData.Level < 200 then return end
         if SeaIndex ~= 1 then return end -- a quest do Saber é no Sea 1 (Jungle)
-        if V1MeleeStatus and V1MeleeStatus() == "buy" then return end -- primeiro compra o estilo (Dark Step...) quando já há dinheiro
+        -- (removido) antes a Saber ficava parada enquanto o estilo V1 estava "buy"; se a compra falhasse, ficava presa para sempre.
+        -- O módulo de compra do topo já pausa o farm sozinho enquanto compra.
         local X = Remotes.CommF_:InvokeServer('ProQuestProgress')
         if type(X) ~= "table" or type(X.Plates) ~= "table" then return end
         local h
@@ -4315,9 +4344,7 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
             CombatController.Attack(tostring(k), null, null, function() SpecialItems = nil end)
             SpecialItems = nil
 
-            -- [ADDED] "Reset teleport về farm level tiếp" — boss man yêu cầu:
-            -- sau khi hạ xong, reset nhân vật (respawn) để đảm bảo LevelFarm
-            -- tiếp tục sạch sẽ thay vì có thể bị kẹt vị trí/trạng thái combat
+            -- NÃO reinicia o personagem depois de matar o boss (pedido do utilizador): só confirma a morte e continua.
             pcall(function()
                 if k.Parent == nil or (k:FindFirstChild("Humanoid") and k.Humanoid.Health <= 0) then
                     -- [FIXED] Xác nhận chết thật trước khi reset (tránh false-positive lúc chuyển phase)
@@ -4359,9 +4386,8 @@ function W.Attack(target) pcall(function() _G.FastAttack = os.time() end) end
     end)
 
     FunctionsHandler.SpecialBossesTask:RegisterMethod('Start', function(k)
-        if FunctionsHandler.RaidController.Methods.GetCurrentRaidIsland:Call() then
-            pcall(function() LocalPlayer.Character.Humanoid.Health = 0 end)
-        end
+        -- (removido) antes, se estivesses numa ilha de raid, o personagem era morto (reset) ao começar este boss.
+        -- Agora o TweenController voa para o boss sem reiniciar.
         if k then
             SetTask('MainTask', "Auto Farm Boss - Defeating " .. k.Name)
             SetTask('SubTask', '👾 Special Boss: ' .. k.Name)
