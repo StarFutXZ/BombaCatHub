@@ -2023,6 +2023,7 @@ end
         return part.ReceiveAge == 0 and _bmPlayerNear(part.Position)
     end
 
+    local _bmLastLog, _bmErrLogged = 0, false
     BringEnemy = function(Mon)
         if not Config.BringMobs then return end
         Mon = Mon or MonResult
@@ -2032,35 +2033,49 @@ end
         local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
         if not enemyFolder or not myRoot then return end
 
-        pcall(function()
-            if sethiddenproperty then
-                sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
-            end
-            local TargetPos = Mon.HumanoidRootPart.CFrame
-            for _, v in next, enemyFolder:GetChildren() do
-                if v.Name == Mon.Name and _bmAlive(v) then
-                    local hrp = v.HumanoidRootPart
-                    if _bmOwner(hrp) and (hrp.Position - myRoot.Position).Magnitude <= BRING_DISTANCE then
-                        pcall(function()
-                            for _, a in pairs(v:GetChildren()) do
-                                if a:IsA("BasePart") then
-                                    a.CanCollide = false
-                                end
+        if sethiddenproperty then
+            pcall(sethiddenproperty, LocalPlayer, "SimulationRadius", math.huge)
+        end
+
+        local TargetPos = Mon.HumanoidRootPart.CFrame
+        local moved = 0
+        for _, v in next, enemyFolder:GetChildren() do
+            if v ~= Mon and v.Name == Mon.Name and _bmAlive(v) then
+                local hrp = v.HumanoidRootPart
+                -- [FIX] sem verificação de network owner: o fallback antigo exigia OUTRO jogador
+                -- por perto, por isso a jogar sozinho nunca puxava nada.
+                if (hrp.Position - myRoot.Position).Magnitude <= BRING_DISTANCE then
+                    local ok, err = pcall(function()
+                        for _, a in pairs(v:GetChildren()) do
+                            if a:IsA("BasePart") then
+                                a.CanCollide = false
                             end
-                            if not hrp:FindFirstChild("Lock") then
-                                local Lock = Instance.new("BodyVelocity")
-                                Lock.Name = "Lock"
-                                Lock.Parent = hrp
-                                Lock.Velocity = Vector3.new(0, 0, 0)
-                                Lock.MaxForce = Vector3.new(10000, 10000, 10000)
-                            end
-                            v.Humanoid.WalkSpeed = 0
-                            v:SetPrimaryPartCFrame(TargetPos)
-                        end)
+                        end
+                        if not hrp:FindFirstChild("Lock") then
+                            local Lock = Instance.new("BodyVelocity")
+                            Lock.Name = "Lock"
+                            Lock.Parent = hrp
+                            Lock.Velocity = Vector3.new(0, 0, 0)
+                            Lock.MaxForce = Vector3.new(10000, 10000, 10000)
+                        end
+                        v.Humanoid.WalkSpeed = 0
+                        -- [FIX] CFrame direto na HRP (SetPrimaryPartCFrame falha em silêncio se o modelo não tiver PrimaryPart)
+                        hrp.CFrame = TargetPos
+                    end)
+                    if ok then
+                        moved = moved + 1
+                    elseif not _bmErrLogged then
+                        _bmErrLogged = true
+                        warn("[BombaCat BringMobs] erro ao mover mob: " .. tostring(err))
                     end
                 end
             end
-        end)
+        end
+
+        if os.time() - _bmLastLog >= 10 then
+            _bmLastLog = os.time()
+            print("[BombaCat BringMobs] alvo: " .. tostring(Mon.Name) .. " | mobs puxados neste ciclo: " .. moved .. " | isnetworkowner: " .. tostring(isnetworkowner ~= nil) .. " | sethiddenproperty: " .. tostring(sethiddenproperty ~= nil))
+        end
     end
 
 
