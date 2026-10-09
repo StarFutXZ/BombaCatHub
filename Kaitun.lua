@@ -15,7 +15,7 @@ Config = {
         SoulGuitar = true,
         RaceV2 = true,
         AutoRaceV3 = true,
-        AutoRandomFruit = false,
+        AutoRandomFruit = true,
     },
     Sword = {
         ["Shark Saw"]        = true,
@@ -6176,83 +6176,7 @@ task.spawn(function()
         while task.wait(5) do pcall(disableAnimations, LP.Character) end
     end)
 
-    -- AUTO REDEEM CODES
-    task.spawn(function()
-        if not Config.Extras.AutoRedeemCodes then return end
-
-        -- Códigos de 2x EXP listados como ativos em outubro de 2026.
-        -- 1lostadmin exige um espaço no final, conforme algumas listas.
-        local REDEEM_CODES = {
-            -- 2x EXP
-            "SUB2GAMERROBOT_EXP1",
-            "EASTEREXP",
-            "1lostadmin ",
-            "Axiore",
-            "TheGreatAce",
-            "Sub2Fer999",
-            "Enyu_is_Pro",
-            "JCWK",
-            "Starcodeheo",
-            "Magicbus",
-            "Kittgaming",
-            "Sub2CaptainMaui",
-            "Sub2OfficialNoobie",
-            "Sub2NoobMaster123",
-            "Sub2Daigrock",
-            "StrawHatMaine",
-            "TantaiGaming",
-            "Bluxxy",
-            -- Outros códigos que dão reset de stats, título ou Beli.
-            "SUB2GAMERROBOT_RESET1",
-            "Sub2UncleKizaru",
-            "KITT_RESET",
-            "Bignews",
-            "Fudd10",
-            "Fudd10_v2",
-            "Chandler",
-        }
-
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        local Players = game:GetService("Players")
-        local player = Players.LocalPlayer
-
-        -- Espera o jogo e os remotes acabarem de carregar antes de enviar pedidos.
-        if not game:IsLoaded() then game.Loaded:Wait() end
-        task.wait(8)
-
-        local remotes = ReplicatedStorage:WaitForChild("Remotes", 30)
-        local commF = remotes and remotes:WaitForChild("CommF_", 30)
-        if not commF then
-            warn("[BombaCat Hub] AutoRedeem: ReplicatedStorage.Remotes.CommF_ não encontrado. O jogo pode ter alterado o sistema de códigos.")
-            return
-        end
-        if not commF:IsA("RemoteFunction") then
-            warn("[BombaCat Hub] AutoRedeem: CommF_ existe mas não é RemoteFunction; não foi possível resgatar.")
-            return
-        end
-
-        print("[BombaCat Hub] AutoRedeem iniciado; serão tentados " .. #REDEEM_CODES .. " códigos. Os já usados não podem ser resgatados outra vez.")
-        for _, code in ipairs(REDEEM_CODES) do
-            local ok, result = pcall(function()
-                -- Este é o mesmo comando de resgate usado pelo sistema de códigos de Blox Fruits.
-                return commF:InvokeServer("Redeem", code)
-            end)
-            if not ok then
-                warn("[BombaCat Hub] ERRO ao chamar Redeem para [" .. code .. "]: " .. tostring(result))
-            elseif result == nil then
-                warn("[BombaCat Hub] [" .. code .. "] servidor devolveu nil; não é possível confirmar o resgate.")
-            elseif typeof(result) == "table" then
-                local okJson, resultText = pcall(function()
-                    return game:GetService("HttpService"):JSONEncode(result)
-                end)
-                print("[BombaCat Hub] Resposta do servidor para [" .. code .. "]: " .. (okJson and resultText or tostring(result)))
-            else
-                print("[BombaCat Hub] Resposta do servidor para [" .. code .. "]: " .. tostring(result))
-            end
-            task.wait(1.5)
-        end
-        print("[BombaCat Hub] AutoRedeem terminou. Consulta as respostas acima para saber quais foram aceites/rejeitadas.")
-    end)
+    -- AUTO REDEEM CODES: movido para fora de hoangtuveu() (ver bloco antes da chamada final)
 
     -- AUTO RANDOM FRUIT (GACHA - Zioles)
     getgenv().AutoRandomFruit = Config.Extras.AutoGachaFruit
@@ -6732,4 +6656,92 @@ end
 -- Interface HEX Hub antiga removida; mantida a interface principal BombaCat Hub.
 
 -- Iniciar o loop principal apenas depois de configurar as funções extras.
+--============================================================
+-- AUTO REDEEM CODES (bloco independente, corre mesmo que algo dentro de hoangtuveu() falhe)
+--============================================================
+task.spawn(function()
+    local AUTO_REDEEM = true   -- põe false para desligar
+    if not AUTO_REDEEM then return end
+
+    -- Códigos de 2x EXP e outros (cada código só pode ser usado 1 vez por conta).
+    local REDEEM_CODES = {
+            -- 2x EXP
+            "SUB2GAMERROBOT_EXP1",
+            "EASTEREXP",
+            "1lostadmin ",
+            "Axiore",
+            "TheGreatAce",
+            "Sub2Fer999",
+            "Enyu_is_Pro",
+            "JCWK",
+            "Starcodeheo",
+            "Magicbus",
+            "Kittgaming",
+            "Sub2CaptainMaui",
+            "Sub2OfficialNoobie",
+            "Sub2NoobMaster123",
+            "Sub2Daigrock",
+            "StrawHatMaine",
+            "TantaiGaming",
+            "Bluxxy",
+            -- Outros códigos que dão reset de stats, título ou Beli.
+            "SUB2GAMERROBOT_RESET1",
+            "Sub2UncleKizaru",
+            "KITT_RESET",
+            "Bignews",
+            "Fudd10",
+            "Fudd10_v2",
+            "Chandler",
+        }
+
+    local RS = game:GetService("ReplicatedStorage")
+    local HttpService = game:GetService("HttpService")
+    if not game:IsLoaded() then game.Loaded:Wait() end
+    repeat task.wait(1) until game.Players.LocalPlayer and game.Players.LocalPlayer.Character
+    task.wait(5)
+
+    -- procura o remote de códigos: Remotes.Redeem (usado pelo menu de códigos) e, em segundo, CommF_
+    local remotes = RS:WaitForChild("Remotes", 30)
+    if not remotes then
+        warn("[BombaCat Hub] AutoRedeem: pasta ReplicatedStorage.Remotes não encontrada.")
+        return
+    end
+    local remote, mode
+    for _ = 1, 30 do
+        local r = remotes:FindFirstChild("Redeem")
+        if r and r:IsA("RemoteFunction") then remote, mode = r, "Redeem" break end
+        task.wait(1)
+    end
+    if not remote then
+        local c = remotes:FindFirstChild("CommF_")
+        if c and c:IsA("RemoteFunction") then remote, mode = c, "CommF_" end
+    end
+    if not remote then
+        warn("[BombaCat Hub] AutoRedeem: nenhum RemoteFunction de códigos encontrado (Remotes.Redeem / CommF_).")
+        return
+    end
+    print("[BombaCat Hub] AutoRedeem a usar remote: Remotes." .. remote.Name .. " | códigos: " .. #REDEEM_CODES)
+
+    for _, code in ipairs(REDEEM_CODES) do
+        local ok, result = pcall(function()
+            if mode == "Redeem" then
+                return remote:InvokeServer(code)
+            end
+            return remote:InvokeServer("Redeem", code)
+        end)
+        local shown
+        if not ok then
+            shown = "ERRO: " .. tostring(result)
+        elseif typeof(result) == "table" then
+            local okJ, txt = pcall(function() return HttpService:JSONEncode(result) end)
+            shown = okJ and txt or tostring(result)
+        else
+            shown = tostring(result)
+        end
+        print("[BombaCat Hub] [" .. code .. "] -> " .. shown)
+        task.wait(1.5)
+    end
+    print("[BombaCat Hub] AutoRedeem terminou.")
+end)
+
 hoangtuveu()
