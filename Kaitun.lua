@@ -925,17 +925,12 @@ function hoangtuveu()
     W.Instances['DebugLine'] = engineValue -- [FIX] o Engine Controller nunca atualizava (a chave DebugLine não existia)
 
     function SetText(key, text)
-        task.spawn(function()
-            local target = W.Instances[key]
-            if not target then return end
-            text = tostring(text)
-            if target.Text == text then return end
-            local ts = game:GetService("TweenService")
-            local fadeOut = ts:Create(target,TweenInfo.new(0.12,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{TextTransparency=1})
-            fadeOut:Play(); fadeOut.Completed:Wait()
-            target.Text = text
-            ts:Create(target,TweenInfo.new(0.15,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{TextTransparency=0}):Play()
-        end)
+        -- [FIX] sem animação de fade: com atualizações rápidas os tweens competiam e o texto ficava quase invisível
+        local target = W.Instances[key]
+        if not target then return end
+        text = tostring(text)
+        if target.Text ~= text then target.Text = text end
+        if target.TextTransparency ~= 0 then target.TextTransparency = 0 end
     end
     task.spawn(function()
         while gui.Parent do
@@ -2716,7 +2711,12 @@ end
                     -- vòng sau khi tiền/Fragments đủ (RaidController vẫn
                     -- chạy song song farm Fragments qua TasksOrder bình thường)
                     -- Đúng yêu cầu boss man: "chạy lại mua tới chừng nào mua được"
-                    SetTask('MainTask', 'Auto Full Melee | Cần farm tiền cho ' .. melee.name)
+                    -- [FIX] Sem Beli/Fragments (ou sem nível) para comprar: não fica parado.
+                    -- MeleesController vem ANTES do LevelFarm e, como o dispatcher usa "o primeiro que responde ganha",
+                    -- este "return" deixava o personagem parado. Agora corre o farm de nível (que dá Beli).
+                    local lf = FunctionsHandler.LevelFarm
+                    local okR, hR = pcall(function() return lf.Methods.Refresh:Call() end)
+                    if okR and hR then lf.Methods.Start:Call(hR) end
                     return
                 end
             else
@@ -2729,7 +2729,12 @@ end
                 local mastery = ScriptStorage.Melees[melee.name] or 0
 
                 if melee.levelReq and ScriptStorage.PlayerData.Level < melee.levelReq then
-                    SetTask('MainTask', 'Auto Full Melee | Cần Player Level ' .. melee.levelReq .. ' cho ' .. melee.name)
+                    -- [FIX] Sem Beli/Fragments (ou sem nível) para comprar: não fica parado.
+                    -- MeleesController vem ANTES do LevelFarm e, como o dispatcher usa "o primeiro que responde ganha",
+                    -- este "return" deixava o personagem parado. Agora corre o farm de nível (que dá Beli).
+                    local lf = FunctionsHandler.LevelFarm
+                    local okR, hR = pcall(function() return lf.Methods.Refresh:Call() end)
+                    if okR and hR then lf.Methods.Start:Call(hR) end
                     return
                 end
 
