@@ -5,6 +5,7 @@ Config = {
         AutoHop = true,
         AutoHopDelay = 60 * 60,
         FpsBoost = false,
+        Noclip = true,
         blackscreen = false,
         LowGraphics = true
     },
@@ -71,6 +72,43 @@ local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 
 local lp = Players.LocalPlayer
+
+-- [ADDED] Noclip: permite atravessar obstáculos durante o farming.
+-- Guarda os valores originais e restaura-os se o Noclip for desligado.
+local noclipOriginalCollisions = setmetatable({}, {__mode = "k"})
+local function ApplyNoclip(character, enabled)
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            if enabled then
+                if noclipOriginalCollisions[part] == nil then
+                    noclipOriginalCollisions[part] = part.CanCollide
+                end
+                part.CanCollide = false
+            else
+                local original = noclipOriginalCollisions[part]
+                if original ~= nil then
+                    part.CanCollide = original
+                    noclipOriginalCollisions[part] = nil
+                end
+            end
+        end
+    end
+end
+
+task.spawn(function()
+    while task.wait(0.2) do
+        pcall(function()
+            local character = lp.Character
+            ApplyNoclip(character, Config.Configuration.Noclip == true)
+        end)
+    end
+end)
+
+lp.CharacterAdded:Connect(function(character)
+    task.wait(0.5)
+    ApplyNoclip(character, Config.Configuration.Noclip == true)
+end)
 
 print("[Main] Bắt đầu Tiro Kaitun Modulo v2.2...")
 timeee = os.time()
@@ -1389,12 +1427,10 @@ end
     -- (trước LevelFarm) — mua melee/kiểm tra điều kiện tiên quyết giờ mới
     -- thật sự preempt được leveling thường.
     TasksOrder = {
-        -- [FIX Saber v2] A Saber tem de vir ANTES do MeleesController: o dispatcher e "o primeiro que responde ganha"
-        -- e o MeleesController devolve true quase sempre (ate teres os 10 estilos), por isso a Saber nunca chegava a correr.
-        "Saber",
         "SpecialBossesTask", "SwordBossTask", "BossesTask",
         "RaidController", "AutoRaidIce",
         "CakePrinceTask", "MeleesController",
+        "Saber", -- [FIX] antes do LevelFarm (o LevelFarm quase nunca devolve nil e bloqueava o Saber)
         "LevelFarm", "Tushita", 'Yama',
         "CursedDualKatana", "SoulGuitar", "EvoRace", "RaceAwakening",
         -- [FIXED - xung đột code phát hiện khi rà toàn bộ] Bỏ "Wenlocktoad"
@@ -3556,37 +3592,25 @@ end
     -- ============================================================
     FunctionsHandler.Saber:RegisterMethod('Refresh', function()
         if not Config.Items.Saber then return end
-        -- [FIX] A quest da Saber so existe no Sea 1 (no Sea 2/3 dava erro em Map.Jungle e bloqueava o farm)
-        if SeaIndex ~= 1 then return end
-        if ScriptStorage.Backpack.Saber or CheckItem("Saber") then return end
-        if (ScriptStorage.PlayerData.Level or 0) < 200 then return end
-        -- Deixa o MeleesController comprar primeiro o Dark Step (150k Beli), como pediste
-        if Config.Items.AutoFullyMelees and Config.Melee.AutoBuy
-            and not CheckItem("Black Leg") and (ScriptStorage.PlayerData.Beli or 0) >= 150000 then
-            return
-        end
-        -- So pergunta ao servidor a cada 5s (ou logo que o evento RefreshQuestPro avisar)
+        if ScriptStorage.Backpack.Saber then return end
+        if ScriptStorage.PlayerData.Level < 200 then return end
+        -- [FIX] agora o Saber é verificado em todos os ciclos: só pergunta ao servidor a cada 5s
+        -- (ou logo que o evento RefreshQuestPro avisar que o progresso mudou)
         local lastRef = FunctionsHandler.Saber:Get('LastestRefreshSenque')
         if not SaberForceRefresh and lastRef and os.time() - lastRef < 5 then
             return FunctionsHandler.Saber:Get("CurrentProgressLevel")
         end
         SaberForceRefresh = false
-        local ok, X = pcall(function() return Remotes.CommF_:InvokeServer('ProQuestProgress') end)
-        if not ok or type(X) ~= "table" then
-            FunctionsHandler.Saber:Set('LastestRefreshSenque', os.time())
-            return FunctionsHandler.Saber:Get("CurrentProgressLevel")
-        end
+        local X = Remotes.CommF_:InvokeServer('ProQuestProgress')
         local h
-        for _, done in pairs(X.Plates or {}) do
-            if done == false then h = 1 end
-        end
+        for w, w in X.Plates do if w == false then h = 1 end end
         if not h then
             if not X.UsedTorch then h = 2
             elseif not X.UsedCup then h = 3
             elseif not X.TalkedSon then h = 4
             elseif not X.KilledMob then h = 5
             elseif not X.UsedRelic then h = 6
-            elseif not X.KilledShanks and ScriptStorage.Enemies["Saber Expert"] then h = 7 end
+            elseif not X.KilledShanks then h = 7 end
         end
         FunctionsHandler.Saber:Set("CurrentProgressLevel", h)
         FunctionsHandler.Saber:Set('LastestRefreshSenque', os.time())
@@ -3594,82 +3618,68 @@ end
     end)
 
     FunctionsHandler.Saber:RegisterMethod('GetQuestplates', function()
-        local cache = FunctionsHandler.Saber:Get("QuestplatesCache")
-        if cache then return cache end
-        local plates = {}
-        local ok, jungle = pcall(function() return Services.Workspace.Map.Jungle end)
-        if not ok or not jungle then return plates end
-        local qp = jungle:FindFirstChild("QuestPlates")
-        if not qp then return plates end
-        for _, plate in ipairs(qp:GetChildren()) do
-            if plate:FindFirstChild("Button") then table.insert(plates, plate) end
-        end
-        if #plates > 0 then FunctionsHandler.Saber:Set('QuestplatesCache', plates) end
-        return plates
+        local h = FunctionsHandler.Saber:Get("QuestplatesCache")
+        if h then return h end
+        local h = Services.Workspace.Map.Jungle
+        local X = {}
+        table.foreach(h.QuestPlates:GetChildren(), function(h, w) h = w:FindFirstChild("Button") and table.insert(X, w) end)
+        FunctionsHandler.Saber:Set('QuestplatesCache', X)
+        return X
     end)
 
     FunctionsHandler.Saber:RegisterMethod('Start', function()
         local h, X = FunctionsHandler.Saber:Get("CurrentProgressLevel"), FunctionsHandler.Saber:Get('LastestRefreshSenque')
-        -- [FIX] sem recursao Start->Start (podia dar stack overflow quando h ficava nil)
-        if not h or not X or os.time() - X > 60 then
+        if not h then
             FunctionsHandler.Saber.Methods.Refresh:Call()
-            return
-        end
-        if h == 0 then return end
-        if h == 1 then
-            local plates = FunctionsHandler.Saber.Methods.GetQuestplates:Call()
-            for w, D in ipairs(plates) do
-                SetTask('MainTask', "Saber Quest | Quest Plates | Touching " .. w .. "/5")
-                local t0 = os.time()
-                -- [FIX] timeout de 25s por placa para nao ficar preso para sempre
-                while D:FindFirstChild("Button") and CaculateDistance(D.Button.CFrame) > 20 and os.time() - t0 < 25 do
-                    task.wait()
-                    TweenController.Create(D.Button.CFrame)
+            return FunctionsHandler.Saber.Methods.Start:Call()
+        elseif h == 0 then
+        elseif os.time() - X > 60 then
+            FunctionsHandler.Saber.Methods.Refresh:Call()
+            return FunctionsHandler.Saber.Methods.Start:Call()
+        else
+            if h == 1 then
+                local X = FunctionsHandler.Saber.Methods.GetQuestplates:Call()
+                for w, D in X do
+                    SetTask('MainTask', "Saber Quest | Quest Plates | Touching " .. w .. "/5")
+                    while CaculateDistance(D.Button.CFrame) > 20 do
+                        task.wait()
+                        TweenController.Create(D.Button.CFrame)
+                    end
+                    task.wait(1)
                 end
+            elseif h == 2 then
+                SetTask('MainTask', 'Saber Quest | Torch Puzzle | Using Torch')
+                Remotes.CommF_:InvokeServer("ProQuestProgress", 'GetTorch')
                 task.wait(1)
+                Remotes.CommF_:InvokeServer('ProQuestProgress', "DestroyTorch")
+            elseif h == 3 then
+                SetTask('MainTask', "Saber Quest | Sick Man | Helping with Cup")
+                Remotes.CommF_:InvokeServer('ProQuestProgress', "GetCup")
+                if ScriptStorage.Tools.Cup then
+                    FunctionsHandler.LocalPlayerController.Methods.EquipTool:Call('Cup')
+                    task.wait(1)
+                    Remotes.CommF_:InvokeServer("ProQuestProgress", 'FillCup', LocalPlayer.Character.Cup)
+                end
+                Remotes.CommF_:InvokeServer("ProQuestProgress", 'SickMan')
+            elseif h == 4 then
+                SetTask('MainTask', 'Saber Quest | Rich Son | Getting Information')
+                Remotes.CommF_:InvokeServer('ProQuestProgress', 'RichSon')
+            elseif h == 5 then
+                SetTask("MainTask", "Saber Quest | Mob Leader | Defeating Boss")
+                CombatController.Attack('Mob Leader')
+            elseif h == 6 then
+                SetTask("MainTask", 'Saber Quest | Relic | Placing at Location')
+                Remotes.CommF_:InvokeServer('ProQuestProgress', 'RichSon')
+                Remotes.CommF_:InvokeServer("ProQuestProgress", "PlaceRelic")
+            elseif h == 7 then
+                SetTask('MainTask', "Saber Quest | Saber Expert | Final Battle")
+                CombatController.Attack("Saber Expert")
             end
-            SaberForceRefresh = true
-        elseif h == 2 then
-            SetTask('MainTask', 'Saber Quest | Torch Puzzle | Using Torch')
-            Remotes.CommF_:InvokeServer("ProQuestProgress", 'GetTorch')
-            task.wait(1)
-            Remotes.CommF_:InvokeServer('ProQuestProgress', "DestroyTorch")
-            SaberForceRefresh = true
-        elseif h == 3 then
-            SetTask('MainTask', "Saber Quest | Sick Man | Helping with Cup")
-            Remotes.CommF_:InvokeServer('ProQuestProgress', "GetCup")
-            if ScriptStorage.Tools.Cup then
-                FunctionsHandler.LocalPlayerController.Methods.EquipTool:Call('Cup')
-                task.wait(1)
-                Remotes.CommF_:InvokeServer("ProQuestProgress", 'FillCup', LocalPlayer.Character.Cup)
-            end
-            Remotes.CommF_:InvokeServer("ProQuestProgress", 'SickMan')
-            SaberForceRefresh = true
-        elseif h == 4 then
-            SetTask('MainTask', 'Saber Quest | Rich Son | Getting Information')
-            Remotes.CommF_:InvokeServer('ProQuestProgress', 'RichSon')
-            SaberForceRefresh = true
-        elseif h == 5 then
-            SetTask("MainTask", "Saber Quest | Mob Leader | Defeating Boss")
-            CombatController.Attack('Mob Leader')
-            SaberForceRefresh = true
-        elseif h == 6 then
-            SetTask("MainTask", 'Saber Quest | Relic | Placing at Location')
-            Remotes.CommF_:InvokeServer('ProQuestProgress', 'RichSon')
-            Remotes.CommF_:InvokeServer("ProQuestProgress", "PlaceRelic")
-            SaberForceRefresh = true
-        elseif h == 7 then
-            SetTask('MainTask', "Saber Quest | Saber Expert | Final Battle")
-            CombatController.Attack("Saber Expert")
-            SaberForceRefresh = true
         end
     end)
-
-    -- [FIX] ligacao protegida: se o remote nao existir, o script nao rebenta a meio do carregamento
-    pcall(function()
-        Remotes.RefreshQuestPro.OnClientEvent:Connect(function(...)
-            SaberForceRefresh = true
-        end)
+    Remotes.RefreshQuestPro.OnClientEvent:Connect(function(...)
+        SaberForceRefresh = true
+        return FunctionsHandler.Saber.Methods.Refresh.Callback(...)
     end)
 
     -- ============================================================
