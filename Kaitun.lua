@@ -2004,6 +2004,19 @@ end
     CombatController.FLY_SPEED    = 190  -- velocidade de voo em studs/s (era 230); baixa mais se ainda for corrigido de volta
     -- Mobs para os quais o bring fica DESLIGADO (prisioneiros: há NPCs da quest secreta da prisão com o mesmo nome)
     CombatController.NO_BRING = {["Prisoner"] = true, ["Dangerous Prisoner"] = true}
+    -- NPCs a saltar (ex.: prisioneiro da quest secreta: "Confront the prisoner before attacking!")
+    CombatController.IGNORE_SECONDS = 600
+    CombatController.IsIgnored = function(mob)
+        local untilT = mob and mob:GetAttribute("BombaIgnoreUntil")
+        return untilT ~= nil and os.clock() < untilT
+    end
+    CombatController.Skip = function(mob, why)
+        if not mob then return end
+        pcall(function()
+            mob:SetAttribute("BombaIgnoreUntil", os.clock() + CombatController.IGNORE_SECONDS)
+            print("[BombaCat] NPC saltado (" .. tostring(why) .. "): " .. mob.Name)
+        end)
+    end
 
     local function _bmAlive(m)
         return m and not m:FindFirstChild("VehicleSeat")
@@ -2097,7 +2110,7 @@ end
         local anyFound = false
         for _, entity in GetMonAsSortedRange() do
             if table.find(names, entity.Name) and entity:FindFirstChild("Humanoid") and entity.Humanoid.Health > 0 then
-                if (entity:GetAttribute('FailureCount') or 0) < 3 then
+                if (entity:GetAttribute('FailureCount') or 0) < 3 and not CombatController.IsIgnored(entity) then
                     anyFound = true
                     table.insert(candidates, entity)
                 end
@@ -2141,6 +2154,7 @@ end
                 local w, b = 0, os.time()
                 while task.wait() do
                     if _G.Stop then return end
+                    if CombatController.IsIgnored(MonResult) then return end -- NPC saltado: volta a procurar outro
                     if CombatController.ShouldAbort and CombatController.ShouldAbort() then return end
                     if ScriptStorage.Tools["Sweet Chalice"] and getsenv(game.ReplicatedStorage.GuideModule)["_G"]["InCombat"] then
                         pcall(function() if TweenInstance then TweenInstance:Cancel() end end) -- [FIXED] không tween về (0,0,0) khi Sweet Chalice InCombat
@@ -6830,6 +6844,39 @@ task.spawn(function()
             last = r.Position
         end
     end
+end)
+
+--============================================================
+-- SALTAR NPC DA QUEST SECRETA DA PRISÃO
+-- Quando aparece "Confront the prisoner before attacking!", o NPC atual é ignorado
+-- (10 min) e o script passa para outro prisioneiro.
+--============================================================
+task.spawn(function()
+    local lp = game.Players.LocalPlayer
+    local pg = lp:WaitForChild("PlayerGui")
+    local PHRASE = "confront the prisoner"
+    local lastHit = 0
+    local function check(txt)
+        if type(txt) ~= "string" or txt == "" then return end
+        if string.find(string.lower(txt), PHRASE, 1, true) and os.clock() - lastHit > 0.8 then
+            lastHit = os.clock()
+            local mob = MonResult
+            if mob and CombatController and CombatController.Skip then
+                CombatController.Skip(mob, "Confront the prisoner")
+            end
+        end
+    end
+    local hooked = setmetatable({}, {__mode = "k"})
+    local function hook(o)
+        if hooked[o] then return end
+        if o:IsA("TextLabel") or o:IsA("TextButton") then
+            hooked[o] = true
+            check(o.Text)
+            o:GetPropertyChangedSignal("Text"):Connect(function() check(o.Text) end)
+        end
+    end
+    for _, d in ipairs(pg:GetDescendants()) do hook(d) end
+    pg.DescendantAdded:Connect(hook)
 end)
 
 hoangtuveu()
