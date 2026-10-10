@@ -2413,6 +2413,19 @@ end
 
     FunctionsHandler.MeleesController:RegisterMethod("Start", function()
         if not Config.Items.AutoFullyMelees or not Config.Melee.AutoBuy then return end
+        -- [FIX] melee que precisa de mastery (o treino a sério acontece no fim, ver abaixo)
+        local trainName, trainTarget = nil, nil
+        local function farmWith(weapon)
+            -- Corre o farm de nível com o melee escolhido equipado (o Attack respeita _G.SelectWeapon)
+            local lf = FunctionsHandler.LevelFarm
+            local okR, hR = pcall(function() return lf.Methods.Refresh:Call() end)
+            if not (okR and hR) then return end
+            local oldSel = _G.SelectWeapon
+            if weapon then _G.SelectWeapon = weapon end
+            local okS, errS = pcall(function() lf.Methods.Start:Call(hR) end)
+            _G.SelectWeapon = oldSel
+            if not okS then error(errS, 0) end
+        end
         local currentLevel = ScriptStorage.PlayerData.Level or 0
         -- A tarefa só é selecionada abaixo do nível 200 quando falta comprar
         -- Black Leg e existem pelo menos 150 000 Beli. Não tenta comprar os
@@ -2714,9 +2727,7 @@ end
                     -- [FIX] Sem Beli/Fragments (ou sem nível) para comprar: não fica parado.
                     -- MeleesController vem ANTES do LevelFarm e, como o dispatcher usa "o primeiro que responde ganha",
                     -- este "return" deixava o personagem parado. Agora corre o farm de nível (que dá Beli).
-                    local lf = FunctionsHandler.LevelFarm
-                    local okR, hR = pcall(function() return lf.Methods.Refresh:Call() end)
-                    if okR and hR then lf.Methods.Start:Call(hR) end
+                    farmWith(trainName)
                     return
                 end
             else
@@ -2732,9 +2743,7 @@ end
                     -- [FIX] Sem Beli/Fragments (ou sem nível) para comprar: não fica parado.
                     -- MeleesController vem ANTES do LevelFarm e, como o dispatcher usa "o primeiro que responde ganha",
                     -- este "return" deixava o personagem parado. Agora corre o farm de nível (que dá Beli).
-                    local lf = FunctionsHandler.LevelFarm
-                    local okR, hR = pcall(function() return lf.Methods.Refresh:Call() end)
-                    if okR and hR then lf.Methods.Start:Call(hR) end
+                    farmWith(trainName)
                     return
                 end
 
@@ -2747,6 +2756,8 @@ end
                 if Config.Melee.CheckMasteryAfterBuy and v2Name and not CheckItem(v2Name) then
                     if mastery < Config.Melee.RaidAtV1Mastery then
                         SetTask('SubTask', melee.name .. ' đang train mastery (' .. mastery .. '/' .. Config.Melee.RaidAtV1Mastery .. ')')
+                        trainName = trainName or melee.name
+                        trainTarget = trainTarget or Config.Melee.RaidAtV1Mastery
                     else
                         local v2Data = MeleePrices[v2Name]
                         local needFrags = (v2Data and v2Data.Price and v2Data.Price.Fragments) or 5000
@@ -2769,11 +2780,22 @@ end
                 if Config.Melee.CheckMasteryAfterBuy and V2_TO_GODHUMAN[melee.name] and not CheckItem("Godhuman") then
                     if mastery < Config.Melee.GodhumanAtV2Mastery then
                         SetTask('SubTask', melee.name .. ' đang train mastery (' .. mastery .. '/' .. Config.Melee.GodhumanAtV2Mastery .. ')')
+                        trainName = trainName or melee.name
+                        trainTarget = trainTarget or Config.Melee.GodhumanAtV2Mastery
                     end
                 end
 
                 SetTask('SubTask', '✅ ' .. melee.name .. ' đã sẵn sàng')
             end
+        end
+
+        if trainName then
+            -- [FIX] Antes ficava só a mostrar "treinar mastery" e não fazia nada (e bloqueava o resto).
+            -- Agora equipa esse melee e farma mobs até chegar à mastery alvo.
+            local mst = (ScriptStorage.Melees and ScriptStorage.Melees[trainName]) or 0
+            if SetText then SetText('AuxValue', 'Farming until enough mastery for ' .. trainName .. ' (' .. mst .. ' / ' .. tostring(trainTarget) .. ')') end
+            farmWith(trainName)
+            return
         end
 
         SetTask('MainTask', 'Auto Full Melee | 🎉 Hoàn thành tất cả!')
