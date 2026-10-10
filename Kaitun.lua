@@ -2353,6 +2353,16 @@ end
             end
             return nil
         end
+        -- [FIX farm de nível] Do nível 200 ao 299 não há nada para comprar/treinar:
+        -- Black Leg já comprado (ou sem 150 000 Beli) e todos os outros estilos pedem nível 300+.
+        -- Antes, o Refresh devolvia true, o Start saía logo com "Cần Player Level 300 cho Black Leg"
+        -- e, como MeleesController vem ANTES de LevelFarm, o farm de nível nunca corria.
+        if currentLevel < 300 then
+            if CheckItem("Black Leg") or (ScriptStorage.PlayerData.Beli or 0) < 150000 then
+                return nil
+            end
+            return true
+        end
         -- [FIXED] Bỏ "if _G.Level then return nil end" — đây là khóa VĨNH VIỄN,
         -- một khi thiếu tiền 1 lần là MeleesController tắt luôn mãi mãi vì
         -- không có chỗ nào khác set lại _G.Level = false. Bỏ hẳn cờ này,
