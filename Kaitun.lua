@@ -849,7 +849,7 @@ function hoangtuveu()
     local islandDot = make("Frame", {Name="StatusDot",Position=UDim2.new(0,12,0.5,-4),Size=UDim2.new(0,8,0,8),BackgroundColor3=green,BorderSizePixel=0,ZIndex=21}, island)
     corner(islandDot,8)
     label(island,"IslandBrand","BombaCat Hub",10,gold,Enum.Font.GothamBold,{Position=UDim2.new(0,28,0,0),Size=UDim2.new(0,91,1,0),ZIndex=21})
-    label(island,"IslandTask","Level Farming | Mercenary | ...",10,white,Enum.Font.GothamBold,{Position=UDim2.new(0,123,0,0),Size=UDim2.new(1,-151,1,0),TextTruncate=Enum.TextTruncate.AtEnd,ZIndex=21})
+    local islandTask = label(island,"IslandTask","Level Farming | Mercenary | ...",10,white,Enum.Font.GothamBold,{Position=UDim2.new(0,123,0,0),Size=UDim2.new(1,-151,1,0),TextTruncate=Enum.TextTruncate.AtEnd,ZIndex=21})
     local islandArrow = label(island,"IslandArrow",panel.Visible and "⌄" or "⌃",14,muted,Enum.Font.GothamBold,{Position=UDim2.new(1,-25,0,0),Size=UDim2.new(0,18,1,0),TextXAlignment=Enum.TextXAlignment.Center,ZIndex=21})
     island.Activated:Connect(function()
         panel.Visible = not panel.Visible
@@ -921,6 +921,8 @@ function hoangtuveu()
     W.Instances['AuxValue'] = auxValue
     W.Instances['EngineValue'] = engineValue
     W.Instances['MasteryValue'] = masteryValue
+    W.Instances['IslandTask'] = islandTask
+    W.Instances['DebugLine'] = engineValue -- [FIX] o Engine Controller nunca atualizava (a chave DebugLine não existia)
 
     function SetText(key, text)
         task.spawn(function()
@@ -957,6 +959,22 @@ function hoangtuveu()
     end)
     getgenv().alert = function() end
     W.SetText = SetText
+    -- [FIX] a barra (ilha) estava fixa em "Level Farming | Mercenary | ...": agora segue MainTask | SubTask
+    task.spawn(function()
+        while gui.Parent do
+            pcall(function()
+                local T = ScriptStorage and ScriptStorage.Task
+                if T then
+                    local m = tostring(T.MainTask or "")
+                    local sb = tostring(T.SubTask or "")
+                    local txt = m
+                    if sb ~= "" and sb ~= "Idle" then txt = m .. " | " .. sb end
+                    if txt ~= "" and islandTask.Text ~= txt then islandTask.Text = txt end
+                end
+            end)
+            task.wait(0.4)
+        end
+    end)
     W.ToggleUI = function()
         panel.Visible = not panel.Visible
         islandArrow.Text = panel.Visible and "⌄" or "⌃"
@@ -1379,8 +1397,9 @@ end
         "SpecialBossesTask", "SwordBossTask", "BossesTask",
         "RaidController", "AutoRaidIce",
         "CakePrinceTask", "MeleesController",
+        "Saber", -- [FIX] antes do LevelFarm (o LevelFarm quase nunca devolve nil e bloqueava o Saber)
         "LevelFarm", "Tushita", 'Yama',
-        "Saber", "CursedDualKatana", "SoulGuitar", "EvoRace", "RaceAwakening",
+        "CursedDualKatana", "SoulGuitar", "EvoRace", "RaceAwakening",
         -- [FIXED - xung đột code phát hiện khi rà toàn bộ] Bỏ "Wenlocktoad"
         -- và "ExpRedeem" khỏi danh sách này — cả 2 CÓ gọi :Register() (tạo
         -- task slot rỗng) nhưng KHÔNG hề có RegisterMethod("Refresh"/"Start")
@@ -3459,6 +3478,7 @@ end
             -- (thay thế bringMob + equipWeapon + FastAttack + CheckMonster)
             -- [FIX] Se ficar sem missão enquanto mata NPCs, para o ataque e volta a pegar a missão.
             -- Só aborta se não houver missão nem no evento QuestUpdate nem no GUI por mais de 1.5s.
+            SetTask("MainTask", "Level Farm | " .. Q.Mon .. " | Farming")
             local noQuestSince = nil
             CombatController.ShouldAbort = function()
                 local guiQuest = false
@@ -3509,6 +3529,13 @@ end
         if not Config.Items.Saber then return end
         if ScriptStorage.Backpack.Saber then return end
         if ScriptStorage.PlayerData.Level < 200 then return end
+        -- [FIX] agora o Saber é verificado em todos os ciclos: só pergunta ao servidor a cada 5s
+        -- (ou logo que o evento RefreshQuestPro avisar que o progresso mudou)
+        local lastRef = FunctionsHandler.Saber:Get('LastestRefreshSenque')
+        if not SaberForceRefresh and lastRef and os.time() - lastRef < 5 then
+            return FunctionsHandler.Saber:Get("CurrentProgressLevel")
+        end
+        SaberForceRefresh = false
         local X = Remotes.CommF_:InvokeServer('ProQuestProgress')
         local h
         for w, w in X.Plates do if w == false then h = 1 end end
@@ -3585,7 +3612,10 @@ end
             end
         end
     end)
-    Remotes.RefreshQuestPro.OnClientEvent:Connect(FunctionsHandler.Saber.Methods.Refresh.Callback)
+    Remotes.RefreshQuestPro.OnClientEvent:Connect(function(...)
+        SaberForceRefresh = true
+        return FunctionsHandler.Saber.Methods.Refresh.Callback(...)
+    end)
 
     -- ============================================================
     -- SECOND SEA PUZZLE (DRESSROSA)
