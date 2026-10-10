@@ -2118,6 +2118,7 @@ end
         sethiddenproperty(game.Players.LocalPlayer, 'SimulationRadius', math.huge)
         h = type(h) == "string" and {h} or (h or {})
         for y, L in (h) do
+            if CombatController.ShouldAbort and CombatController.ShouldAbort() then return end
             local b = tostring(L)
             if b == 'Deandre' or b == "Urban" or b == "Diablo" and (os.time() - (LastFire12 or 0)) > 180 then
                 LastFire12 = os.time()
@@ -2137,6 +2138,7 @@ end
                 local w, b = 0, os.time()
                 while task.wait() do
                     if _G.Stop then return end
+                    if CombatController.ShouldAbort and CombatController.ShouldAbort() then return end
                     if ScriptStorage.Tools["Sweet Chalice"] and getsenv(game.ReplicatedStorage.GuideModule)["_G"]["InCombat"] then
                         pcall(function() if TweenInstance then TweenInstance:Cancel() end end) -- [FIXED] không tween về (0,0,0) khi Sweet Chalice InCombat
                         return
@@ -3428,7 +3430,23 @@ end
             end
             -- CombatController.Attack tự làm: tìm quái + tween + đánh
             -- (thay thế bringMob + equipWeapon + FastAttack + CheckMonster)
-            CombatController.Attack(Q.Mon)
+            -- [FIX] Se ficar sem missão enquanto mata NPCs, para o ataque e volta a pegar a missão.
+            -- Só aborta se não houver missão nem no evento QuestUpdate nem no GUI por mais de 1.5s.
+            local noQuestSince = nil
+            CombatController.ShouldAbort = function()
+                local guiQuest = false
+                pcall(function() guiQuest = LocalPlayer.PlayerGui.Main.Quest.Visible end)
+                local ev = GetActiveQuestName()
+                if guiQuest or (ev ~= nil and ev ~= false) then
+                    noQuestSince = nil
+                    return false
+                end
+                noQuestSince = noQuestSince or os.clock()
+                return (os.clock() - noQuestSince) > 1.5
+            end
+            local okAtk, errAtk = pcall(CombatController.Attack, Q.Mon)
+            CombatController.ShouldAbort = nil -- limpa sempre, para não afetar bosses/outras tarefas
+            if not okAtk then error(errAtk, 0) end
         end
     end)
 
