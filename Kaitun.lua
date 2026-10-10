@@ -1886,7 +1886,7 @@ end
         end
 
         local dist = CaculateDistance(block.CFrame, target)
-        local divisor = 230
+        local divisor = (CombatController and CombatController.FLY_SPEED) or 190 -- studs/s (antes: 230)
         local duration = math.max(dist / divisor, 0.08)
         shouldTween = true
         activeTweenTarget = target
@@ -2001,6 +2001,7 @@ end
     -- [FIX morte] altura de voo acima do mob e máximo de mobs puxados por ciclo (o alcance de ataque é 65 studs)
     CombatController.HOVER_HEIGHT = 30
     CombatController.BRING_MAX    = 6
+    CombatController.FLY_SPEED    = 190  -- velocidade de voo em studs/s (era 230); baixa mais se ainda for corrigido de volta
 
     local function _bmAlive(m)
         return m and not m:FindFirstChild("VehicleSeat")
