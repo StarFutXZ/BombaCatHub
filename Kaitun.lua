@@ -2002,33 +2002,8 @@ end
     CombatController.HOVER_HEIGHT = 30
     CombatController.BRING_MAX    = 6
     CombatController.FLY_SPEED    = 190  -- velocidade de voo em studs/s (era 230); baixa mais se ainda for corrigido de volta
-
-    -- [FIX prisioneiros] NPCs invulneráveis (ex.: quest secreta da prisão, update 30) que têm o
-    -- MESMO nome dos mobs do farm. Se o NPC não perder vida, é ignorado durante 10 min, fica livre
-    -- do bring e volta à posição original (guardada antes de o puxar).
-    CombatController.IGNORE_SECONDS = 600
-    CombatController.IsIgnored = function(mob)
-        local untilT = mob and mob:GetAttribute("BombaIgnoreUntil")
-        return untilT ~= nil and os.clock() < untilT
-    end
-    CombatController.Blacklist = function(mob)
-        pcall(function()
-            mob:SetAttribute("BombaIgnoreUntil", os.clock() + CombatController.IGNORE_SECONDS)
-            local hrp = mob:FindFirstChild("HumanoidRootPart")
-            local hum = mob:FindFirstChild("Humanoid")
-            if hrp then
-                local lk = hrp:FindFirstChild("Lock")
-                if lk then lk:Destroy() end
-                local old = mob:GetAttribute("OldPosition")
-                if old then hrp.CFrame = CFrame.new(old) end
-            end
-            local ws = mob:GetAttribute("OldWalkSpeed")
-            if hum and ws then hum.WalkSpeed = ws end
-            local attrs = {}
-            for k, v in pairs(mob:GetAttributes()) do attrs[#attrs + 1] = tostring(k) .. "=" .. tostring(v) end
-            print("[BombaCat] NPC sem dano ignorado: " .. mob.Name .. " | atributos: " .. table.concat(attrs, ", "))
-        end)
-    end
+    -- Mobs para os quais o bring fica DESLIGADO (prisioneiros: há NPCs da quest secreta da prisão com o mesmo nome)
+    CombatController.NO_BRING = {["Prisoner"] = true, ["Dangerous Prisoner"] = true}
 
     local function _bmAlive(m)
         return m and not m:FindFirstChild("VehicleSeat")
@@ -2059,6 +2034,7 @@ end
         if not Config.BringMobs then return end
         Mon = Mon or MonResult
         if not _bmAlive(Mon) then return end
+        if CombatController.NO_BRING and CombatController.NO_BRING[Mon.Name] then return end
         local enemyFolder = workspace:FindFirstChild("Enemies")
         local myChar = LocalPlayer.Character
         local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
@@ -2071,16 +2047,12 @@ end
         local TargetPos = Mon.HumanoidRootPart.CFrame
         local moved = 0
         for _, v in next, enemyFolder:GetChildren() do
-            if v ~= Mon and v.Name == Mon.Name and _bmAlive(v) and not CombatController.IsIgnored(v) then
+            if v ~= Mon and v.Name == Mon.Name and _bmAlive(v) then
                 local hrp = v.HumanoidRootPart
                 -- [FIX] sem verificação de network owner: o fallback antigo exigia OUTRO jogador
                 -- por perto, por isso a jogar sozinho nunca puxava nada.
                 if (hrp.Position - myRoot.Position).Magnitude <= BRING_DISTANCE then
                     local ok, err = pcall(function()
-                        if not v:GetAttribute("OldPosition") then
-                            v:SetAttribute("OldPosition", hrp.Position)
-                            v:SetAttribute("OldWalkSpeed", v.Humanoid.WalkSpeed)
-                        end
                         for _, a in pairs(v:GetChildren()) do
                             if a:IsA("BasePart") then
                                 a.CanCollide = false
@@ -2125,7 +2097,7 @@ end
         local anyFound = false
         for _, entity in GetMonAsSortedRange() do
             if table.find(names, entity.Name) and entity:FindFirstChild("Humanoid") and entity.Humanoid.Health > 0 then
-                if (entity:GetAttribute('FailureCount') or 0) < 3 and not CombatController.IsIgnored(entity) then
+                if (entity:GetAttribute('FailureCount') or 0) < 3 then
                     anyFound = true
                     table.insert(candidates, entity)
                 end
@@ -2195,14 +2167,6 @@ end
                             end
                             if h >= CombatController.MAX_ATTACK_DURATION and C.Health - C.MaxHealth == 0 then
                                 h = 0
-                                -- [FIX prisioneiros] o ramo OldPosition abaixo nunca descartava o NPC sem dano
-                                local fc = (MonResult:GetAttribute("FailureCount") or 0) + 1
-                                MonResult:SetAttribute("FailureCount", fc)
-                                if fc >= 2 then
-                                    CombatController.Blacklist(MonResult)
-                                    task.wait()
-                                    return
-                                end
                                 local D = MonResult:GetAttribute('OldPosition')
                                 if D then
                                     MonResult:SetPrimaryPartCFrame(CFrame.new(D))
