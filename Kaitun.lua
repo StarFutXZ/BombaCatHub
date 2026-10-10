@@ -1998,6 +1998,9 @@ end
     -- Liga/desliga com Config.BringMobs. Chamado dentro do CombatController.Grab.
     -- ============================================================
     local BRING_DISTANCE = 500 -- mesmo valor fixo usado no Main.txt
+    -- [FIX morte] altura de voo acima do mob e máximo de mobs puxados por ciclo (o alcance de ataque é 65 studs)
+    CombatController.HOVER_HEIGHT = 30
+    CombatController.BRING_MAX    = 6
 
     local function _bmAlive(m)
         return m and not m:FindFirstChild("VehicleSeat")
@@ -2064,6 +2067,7 @@ end
                     end)
                     if ok then
                         moved = moved + 1
+                        if moved >= (CombatController.BRING_MAX or 6) then break end
                     elseif not _bmErrLogged then
                         _bmErrLogged = true
                         warn("[BombaCat BringMobs] erro ao mover mob: " .. tostring(err))
@@ -2144,7 +2148,7 @@ end
                     end
                     -- Aproximação fixa e acima do NPC: não usar CaculateCircreDirection,
                     -- que move em círculo. 12 studs evitam entrar no volume físico do NPC.
-                    TweenController.Create(p.Position + Vector3.new(0, 12, 0))
+                    TweenController.Create(p.Position + Vector3.new(0, CombatController.HOVER_HEIGHT or 30, 0))
                     if CaculateDistance(p.Position + Vector3.new(0, 35, 0)) < 150 then
                         y = D and D()
                         CombatController.Grab(L or '')
@@ -6757,6 +6761,43 @@ task.spawn(function()
         task.wait(1.5)
     end
     print("[BombaCat Hub] AutoRedeem terminou.")
+end)
+
+--============================================================
+-- DIAGNÓSTICO BOMBACAT (só imprime no console, não altera o farm)
+-- Mostra quando o personagem morre e quando é movido de repente para longe.
+--============================================================
+task.spawn(function()
+    local lp = game.Players.LocalPlayer
+    local function taskInfo()
+        local T = (ScriptStorage and ScriptStorage.Task) or {}
+        return tostring(T.MainTask) .. " | " .. tostring(T.SubTask)
+    end
+    local function hook(char)
+        local hum = char:WaitForChild("Humanoid", 15)
+        if hum then
+            hum.Died:Connect(function()
+                local r = char:FindFirstChild("HumanoidRootPart")
+                print("[BombaCat Debug] PERSONAGEM MORREU em " .. (r and tostring(r.Position) or "?") .. " | " .. taskInfo())
+            end)
+        end
+    end
+    if lp.Character then task.spawn(hook, lp.Character) end
+    lp.CharacterAdded:Connect(function(c)
+        print("[BombaCat Debug] reapareceu | " .. taskInfo())
+        hook(c)
+    end)
+
+    local last
+    while task.wait(0.4) do
+        local r = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+        if r then
+            if last and (r.Position - last).Magnitude > 600 and not getgenv().OnFarm then
+                print("[BombaCat Debug] salto de " .. math.floor((r.Position - last).Magnitude) .. " studs sem voo | " .. taskInfo())
+            end
+            last = r.Position
+        end
+    end
 end)
 
 hoangtuveu()
