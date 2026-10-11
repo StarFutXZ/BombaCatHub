@@ -2484,7 +2484,7 @@ end
 
     local function ElectroNPCCFrame()
         local ok, cf = pcall(function()
-            local npc = workspace.NPCs:FindFirstChild(ELECTRO_NPC) or (ScriptStorage.NPCs and ScriptStorage.NPCs[ELECTRO_NPC])
+            local npc = workspace.NPCs:FindFirstChild(ELECTRO_NPC)
             if npc then return npc:GetPivot() end
         end)
         if ok and cf then return cf end
@@ -2552,7 +2552,7 @@ end
     -- Diagnóstico: imprime os textos visíveis no ecrã (para ver o que o diálogo realmente diz)
     local function ElectroDumpTexts()
         local pg = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
-        if not pg then return "" end
+        if not pg then return end
         local out, n = {}, 0
         for _, d in ipairs(pg:GetDescendants()) do
             if (d:IsA("TextButton") or d:IsA("TextLabel")) and type(d.Text) == "string" and d.Text ~= "" and #d.Text < 80 then
@@ -2568,77 +2568,196 @@ end
                 end
             end
         end
-        local str = table.concat(out, " | ")
-        print("[BombaCat Electro] textos visíveis: " .. str)
-        return str
+        print("[BombaCat Electro] textos visíveis: " .. table.concat(out, " | "))
     end
 
     local function ElectroTalk()
-        local npc = workspace.NPCs:FindFirstChild(ELECTRO_NPC) or (ScriptStorage.NPCs and ScriptStorage.NPCs[ELECTRO_NPC])
+        local npc = workspace.NPCs:FindFirstChild(ELECTRO_NPC)
         if not npc then return false end
         local prompt = npc:FindFirstChildWhichIsA("ProximityPrompt", true)
-        if prompt and typeof(fireproximityprompt) == "function" then pcall(function() prompt.HoldDuration = 0 end) pcall(fireproximityprompt, prompt) end
+        if prompt and typeof(fireproximityprompt) == "function" then pcall(fireproximityprompt, prompt) end
         local cd = npc:FindFirstChildWhichIsA("ClickDetector", true)
         if cd and typeof(fireclickdetector) == "function" then pcall(fireclickdetector, cd) end
         return true
     end
 
-    -- Nuvens de tempestade carregadas (heurística: nome com "cloud" + efeito de relâmpago/luz).
-    -- Se o jogo usar outros nomes, o debug abaixo imprime os candidatos na consola.
-    local function ElectroFindCloud()
-        local char = game.Players.LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if not hrp then return nil end
-        if ElectroQuest.cloud and ElectroQuest.cloud.Parent and os.clock() - ElectroQuest.lastScan < 3 then
-            return ElectroQuest.cloud
+    -- Nuvens: há várias nuvens de cenário e só UMA pisca (cinzento escuro / relâmpago).
+    -- [FIX v2] A deteção antiga dependia do nome/efeitos da nuvem e do filtro Y>300; se a nuvem
+    -- pisca só por mudança de cor/transparência nunca era encontrada e o personagem ficava
+    -- parado por cima do NPC. Agora: lista candidatos, amostra as propriedades 5x/s, marca a que
+    -- muda ("pisca") e, enquanto nenhuma pisca, visita as mais próximas (cada uma 1x por 90 s).
+    ElectroQuest.state = setmetatable({}, {__mode = "k"})
+    ElectroQuest.cands = {}
+    ElectroQuest.candsAt = 0
+    ElectroQuest.lastCount = -1
+    ElectroQuest.sweepIdx = 0
+    ElectroQuest.acceptPatterns = {"i'll get you one", "i’ll get you one", "ill get you one", "get you one"}
+
+    -- Assinatura das propriedades visuais da nuvem (muda quando ela "pisca")
+    function ElectroQuest.sig(p)
+        local s = tostring(p.Color) .. "|" .. tostring(math.floor(p.Transparency * 100)) .. "|" .. p.Material.Name
+        local n = 0
+        for _, c in ipairs(p:GetChildren()) do
+            n = n + 1
+            if n > 8 then break end
+            if c:IsA("PointLight") or c:IsA("SpotLight") or c:IsA("SurfaceLight") then
+                s = s .. "|L" .. tostring(c.Enabled) .. tostring(math.floor(c.Brightness * 10))
+            elseif c:IsA("Beam") or c:IsA("ParticleEmitter") or c:IsA("Fire") or c:IsA("Sparkles") then
+                s = s .. "|E" .. tostring(c.Enabled)
+            end
         end
-        ElectroQuest.lastScan = os.clock()
-        local best, bestDist, seen = nil, math.huge, {}
+        return s
+    end
+
+    -- Lista de partes candidatas (nome ou pai com "cloud"/"storm"/"thunder"/"lightning"), sem filtro de altura apertado
+    function ElectroQuest.refresh(origin, hrpPos)
+        if os.clock() - ElectroQuest.candsAt < 12 then return end
+        ElectroQuest.candsAt = os.clock()
+        local list = {}
+        local lpChar = game.Players.LocalPlayer.Character
         for i, o in ipairs(workspace:GetDescendants()) do
             if i % 4000 == 0 then task.wait() end
-            if o:IsA("BasePart") then
-                local n = string.lower(o.Name)
-                if string.find(n, "cloud", 1, true) or string.find(n, "storm", 1, true) or string.find(n, "thunder", 1, true) or string.find(n, "lightning", 1, true) then
-                    local charged = string.find(n, "storm", 1, true) or string.find(n, "thunder", 1, true) or string.find(n, "lightning", 1, true) or string.find(n, "charged", 1, true)
-                        or o:FindFirstChildWhichIsA("Beam", true) or o:FindFirstChildWhichIsA("PointLight", true)
-                        or o:FindFirstChildWhichIsA("ParticleEmitter", true) or o:FindFirstChildWhichIsA("ClickDetector", true)
-                    if o.Position.Y > 300 and o.Position.Y < 3000 then -- as nuvens não aparecem no Upper Skylands
-                        if not seen[o.Name] then seen[o.Name] = true end
-                        if charged then
-                            local d = (o.Position - hrp.Position).Magnitude
-                            if d < bestDist then best, bestDist = o, d end
+            if o:IsA("BasePart") and not (lpChar and o:IsDescendantOf(lpChar)) then
+                local pos = o.Position
+                if pos.Y > 20 and pos.Y < 4500 then
+                    local n = string.lower(o.Name)
+                    local pn = o.Parent and string.lower(o.Parent.Name) or ""
+                    if string.find(n, "cloud", 1, true) or string.find(pn, "cloud", 1, true)
+                        or string.find(n, "storm", 1, true) or string.find(n, "thunder", 1, true)
+                        or string.find(n, "lightning", 1, true) then
+                        local dx, dz = pos.X - origin.X, pos.Z - origin.Z
+                        if math.sqrt(dx * dx + dz * dz) < 3500 and not (o.Parent and o.Parent:FindFirstChildOfClass("Humanoid")) then
+                            list[#list + 1] = o
                         end
                     end
                 end
             end
         end
-        if not ElectroQuest.debugged then
-            ElectroQuest.debugged = true
-            local names = {}
-            for k in pairs(seen) do names[#names + 1] = k end
-            print("[BombaCat Electro] nomes de nuvens/tempestade encontrados em Skylands: " .. (#names > 0 and table.concat(names, ", ") or "nenhum"))
+        if #list > 400 then
+            table.sort(list, function(a, b) return (a.Position - hrpPos).Magnitude < (b.Position - hrpPos).Magnitude end)
+            for k = #list, 401, -1 do list[k] = nil end
         end
-        ElectroQuest.cloud = best
+        ElectroQuest.cands = list
+        if #list ~= ElectroQuest.lastCount then
+            ElectroQuest.lastCount = #list
+            local names, seen, n = {}, {}, 0
+            for _, p in ipairs(list) do
+                if not seen[p.Name] and n < 12 then
+                    seen[p.Name] = true
+                    n = n + 1
+                    names[n] = p.Name
+                end
+            end
+            print(string.format("[BombaCat Electro] %d nuvens candidatas (nomes: %s)", #list, n > 0 and table.concat(names, ", ") or "nenhum"))
+        end
+    end
+
+    -- Amostra as candidatas e conta quantas vezes cada uma mudou de aspeto
+    function ElectroQuest.sample()
+        local st = ElectroQuest.state
+        for _, p in ipairs(ElectroQuest.cands) do
+            if p.Parent then
+                local ok, sg = pcall(ElectroQuest.sig, p)
+                if ok then
+                    local rec = st[p]
+                    if not rec then
+                        st[p] = {sig = sg, changes = 0, visited = 0}
+                    elseif rec.sig ~= sg then
+                        rec.sig = sg
+                        rec.changes = rec.changes + 1
+                    end
+                end
+            end
+        end
+    end
+
+    -- Escolhe a melhor nuvem: a que pisca > nome/efeitos de tempestade > a mais próxima ainda não visitada
+    function ElectroQuest.pick(hrp, origin)
+        ElectroQuest.refresh(origin, hrp.Position)
+        local best, bestScore = nil, -math.huge
+        local now = os.clock()
+        for _, p in ipairs(ElectroQuest.cands) do
+            if p.Parent then
+                local rec = ElectroQuest.state[p]
+                if not rec or now - rec.visited > 90 then
+                    local score = -(p.Position - hrp.Position).Magnitude
+                    if rec and rec.changes >= 2 then score = score + 100000 end
+                    local n = string.lower(p.Name)
+                    if string.find(n, "storm", 1, true) or string.find(n, "thunder", 1, true)
+                        or string.find(n, "lightning", 1, true) or string.find(n, "charged", 1, true) then
+                        score = score + 50000
+                    end
+                    if p:FindFirstChildWhichIsA("PointLight") or p:FindFirstChildWhichIsA("Beam") then score = score + 20000 end
+                    if score > bestScore then best, bestScore = p, score end
+                end
+            end
+        end
         return best
     end
 
-    local ElectroKeyIdx = 0
-    local function ElectroHitCloud()
-        local vim = game:GetService("VirtualInputManager")
-        pcall(function() vim:SendMouseButtonEvent(500, 400, 0, true, game, 0) end)
-        task.wait(0.05)
-        pcall(function() vim:SendMouseButtonEvent(500, 400, 0, false, game, 0) end)
-        -- A wiki indica que a nuvem pode precisar de um golpe com física destrutiva: roda as skills Z/X/C/V
-        local keys = {Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}
-        ElectroKeyIdx = ElectroKeyIdx % #keys + 1
-        pcall(function() vim:SendKeyEvent(true, keys[ElectroKeyIdx], false, game) end)
-        task.wait(0.1)
-        pcall(function() vim:SendKeyEvent(false, keys[ElectroKeyIdx], false, game) end)
+    -- Toca / ataca a nuvem: toque físico, detectores e um clique apontado ao ecrã onde a nuvem está
+    function ElectroQuest.interact(p)
+        local char = game.Players.LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp or not p then return end
+        if typeof(firetouchinterest) == "function" then
+            pcall(function()
+                firetouchinterest(hrp, p, 0)
+                task.wait()
+                firetouchinterest(hrp, p, 1)
+            end)
+        end
+        local cd = p:FindFirstChildWhichIsA("ClickDetector", true)
+        if cd and typeof(fireclickdetector) == "function" then pcall(fireclickdetector, cd) end
+        local pr = p:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if pr and typeof(fireproximityprompt) == "function" then pcall(fireproximityprompt, pr) end
+        pcall(function()
+            local cam = workspace.CurrentCamera
+            local v, onScreen = cam:WorldToViewportPoint(p.Position)
+            local x, y = cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2
+            if onScreen then x, y = v.X, v.Y end
+            local vim = game:GetService("VirtualInputManager")
+            vim:SendMouseButtonEvent(x, y, 0, true, game, 0)
+            task.wait(0.05)
+            vim:SendMouseButtonEvent(x, y, 0, false, game, 0)
+        end)
+    end
+
+    -- Varre o céu de Skylands em círculos (também faz carregar nuvens distantes, caso o mapa faça streaming)
+    function ElectroQuest.sweep(origin)
+        local heights = {200, 450, 750, 1100, 1500, 1900}
+        local angles = {0, 90, 180, 270}
+        local i = ElectroQuest.sweepIdx
+        local h = heights[(i % #heights) + 1]
+        local a = math.rad(angles[(math.floor(i / #heights) % #angles) + 1])
+        local target = CFrame.new(origin.X + math.cos(a) * 350, h, origin.Z + math.sin(a) * 350)
+        if CaculateDistance(target) < 60 then ElectroQuest.sweepIdx = i + 1 end
+        ElectroMove(target)
+    end
+
+    -- Amostrador em segundo plano (só corre com a missão ativa e aceite)
+    if not ElectroQuest.samplerStarted then
+        ElectroQuest.samplerStarted = true
+        task.spawn(function()
+            while task.wait(0.2) do
+                local eqa = getgenv().ElectroQuestActive
+                if eqa and os.clock() - eqa < 3 and ElectroQuest.taken then
+                    pcall(ElectroQuest.sample)
+                end
+            end
+        end)
     end
 
     -- Devolve true quando o Electro já pode seguir para a compra normal.
     ElectroQuestStep = function()
-        if SeaIndex ~= 1 or ElectroQuest.delivered then getgenv().ElectroQuestActive = false return true end
+        if SeaIndex ~= 1 or ElectroQuest.delivered then
+            if SeaIndex ~= 1 and not ElectroQuest.delivered and not ElectroQuest.warnedSea then
+                ElectroQuest.warnedSea = true
+                warn("[BombaCat Electro] estás no Sea " .. tostring(SeaIndex) .. "; a missão do Lightning Bolt só corre no Sea 1 (Skylands).")
+            end
+            getgenv().ElectroQuestActive = false
+            return true
+        end
         -- Sem 500k Beli e sem a missão em curso: não interrompe o farm de nível (que dá Beli)
         if (ScriptStorage.PlayerData.Beli or 0) < 500000 and ElectroBoltCount() == 0 and not ElectroQuest.taken then
             getgenv().ElectroQuestActive = false
@@ -2646,9 +2765,9 @@ end
         end
         getgenv().ElectroQuestActive = os.clock() -- carimbo de tempo: expira sozinho se a tarefa mudar
         ElectroQuest.startedAt = ElectroQuest.startedAt or os.clock()
-        if os.clock() - ElectroQuest.startedAt > 420 then
-            -- 7 min sem concluir: desiste por 15 min e deixa o script farmar
-            warn("[BombaCat Electro] missão sem progresso há 7 min; pausa de 15 min.")
+        if os.clock() - ElectroQuest.startedAt > 600 then
+            -- 10 min sem concluir: desiste por 15 min e deixa o script farmar
+            warn("[BombaCat Electro] missão sem progresso há 10 min; pausa de 15 min.")
             ElectroQuest.startedAt, ElectroQuest.taken, ElectroQuest.fails = nil, false, 0
             MeleeBlock["Electro"] = os.clock() + 900
             getgenv().ElectroQuestActive = false
@@ -2676,12 +2795,15 @@ end
             if btn then ElectroClickGui(btn); task.wait(1) end
             local pay = ElectroFindGui({"pay $500,000", "pay $500"})
             if pay then ElectroClickGui(pay); task.wait(0.5) end
+            pcall(RefreshInventory)
             if ElectroBoltCount() == 0 then ElectroQuest.delivered = true; ElectroQuest.startedAt = nil; getgenv().ElectroQuestActive = false end
             return false
         end
 
         -- 2) Ainda não aceitou a missão: falar com o Mad Scientist
-        if not ElectroQuest.taken or os.clock() - ElectroQuest.takenAt > 240 then
+        -- [FIX v2] Já não volta ao NPC a cada 240 s: com a missão ativa o diálogo muda (não tem "I'll get you one"),
+        -- por isso o script contava falhas e desistia a meio da caça à nuvem.
+        if not ElectroQuest.taken then
             if CaculateDistance(npcCF) > 12 then
                 SetTask('MainTask', 'Auto Full Melee | Electro: ir ao Mad Scientist (Skylands)')
                 ElectroMove(npcCF)
@@ -2696,17 +2818,25 @@ end
                 ElectroClickGui(pay)
                 return false
             end
-            local accept = ElectroFindGui({"i'll get you one", "i’ll get you one", "ill get you one", "get you one"})
-            if accept and ElectroClickGui(accept) then
-                task.wait(1)
+            -- [FIX v2] Só dá a missão como aceite se o diálogo fechou ou apareceu "Took the Mad Scientist's task"
+            -- (antes bastava o clique "disparar" e a nuvem era caçada sem missão ativa -> nunca dava o Bolt).
+            local accepted = false
+            local accept = ElectroFindGui(ElectroQuest.acceptPatterns)
+            if accept then
+                ElectroClickGui(accept)
+                task.wait(1.2)
+                local still = ElectroFindGui(ElectroQuest.acceptPatterns)
+                local logged = ElectroFindGui({"took the mad scientist", "mad scientist's task", "mad scientist’s task"})
+                accepted = (logged ~= nil) or (still == nil)
+            end
+            if accepted then
                 ElectroQuest.taken, ElectroQuest.takenAt, ElectroQuest.fails = true, os.clock(), 0
-                print("[BombaCat Electro] missão aceite; a procurar nuvens.")
+                ElectroQuest.startedAt = os.clock()
+                ElectroQuest.candsAt = 0
+                print("[BombaCat Electro] missão aceite; a procurar a nuvem que pisca.")
             else
                 ElectroQuest.fails = ElectroQuest.fails + 1
-                local seen = ElectroDumpTexts()
-                local okR, resp = pcall(function() return Remotes.CommF_:InvokeServer("BuyElectro", true) end)
-                print("[BombaCat Electro] BuyElectro(check) devolveu: " .. tostring(okR and resp))
-                SetTask('SubTask', ('Electro (tentativa ' .. ElectroQuest.fails .. '): check=' .. tostring(okR and resp) .. ' | ecrã: ' .. seen):sub(1, 170))
+                if ElectroQuest.fails == 2 or ElectroQuest.fails == 5 then ElectroDumpTexts() end
                 if ElectroQuest.fails >= 8 then
                     warn("[BombaCat Electro] não consegui aceitar a missão (diálogo não encontrado); pausa de 5 min.")
                     ElectroQuest.fails, ElectroQuest.startedAt = 0, nil
@@ -2718,19 +2848,38 @@ end
             return false
         end
 
-        -- 3) Missão ativa: caçar uma nuvem carregada em Skylands
-        local cloud = ElectroFindCloud()
+        -- 3) Missão ativa: caçar a nuvem que pisca em Skylands
+        local char = game.Players.LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return false end
+        local cloud = ElectroQuest.pick(hrp, npcCF.Position)
         if cloud then
-            SetTask('MainTask', 'Auto Full Melee | Electro: a partir uma nuvem de tempestade')
-            ElectroMove(cloud.CFrame) -- entra na nuvem
-            if CaculateDistance(cloud.CFrame) < 25 then
+            local rec = ElectroQuest.state[cloud]
+            if ElectroQuest.target ~= cloud then
+                ElectroQuest.target, ElectroQuest.arrivedAt = cloud, nil
+                print(string.format("[BombaCat Electro] nuvem alvo: %s | pisca=%s | Y=%d",
+                    cloud.Name, tostring(rec ~= nil and rec.changes >= 2), math.floor(cloud.Position.Y)))
+            end
+            SetTask('MainTask', 'Auto Full Melee | Electro: a entrar na nuvem de tempestade')
+            if CaculateDistance(cloud.CFrame) < 30 then
+                -- dentro da nuvem: mexe-se um pouco, equipa a arma e toca/ataca
+                local t = os.clock()
+                ElectroMove(CFrame.new(cloud.Position + Vector3.new(math.sin(t * 3) * 6, math.cos(t * 2) * 4, math.cos(t * 3) * 6)))
+                ElectroQuest.arrivedAt = ElectroQuest.arrivedAt or os.clock()
                 local tool = _G.SelectWeapon
                 if tool then pcall(function() FunctionsHandler.LocalPlayerController.Methods.EquipTool:Call(tool) end) end
-                ElectroHitCloud()
+                ElectroQuest.interact(cloud)
+                if os.clock() - ElectroQuest.arrivedAt > 4 then
+                    -- 4 s sem Bolt: marca como visitada e passa à próxima
+                    if rec then rec.visited = os.clock() end
+                    ElectroQuest.target, ElectroQuest.arrivedAt = nil, nil
+                end
+            else
+                ElectroMove(CFrame.new(cloud.Position))
             end
         else
-            SetTask('MainTask', 'Auto Full Melee | Electro: à procura de nuvens carregadas em Skylands')
-            ElectroMove(npcCF * CFrame.new(0, 150, 0))
+            SetTask('MainTask', 'Auto Full Melee | Electro: à procura de nuvens em Skylands')
+            ElectroQuest.sweep(npcCF.Position)
         end
         return false
     end
