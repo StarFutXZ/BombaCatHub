@@ -1885,6 +1885,23 @@ end
         local hrp = character and character:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
+        -- [NEW] Ilha submersa do Sea 1 (Underwater City, X > 50000): em vez do requestEntrance/portal remoto,
+        -- voa até ao Whirlpool no mar e entra nele (o jogo teleporta). Se ficar 8 s no Whirlpool sem
+        -- teleportar, volta ao método antigo como reserva.
+        local viaWhirlpool = false
+        if SeaIndex == 1 and a.Position.X > 50000 and hrp.Position.X < 50000 then
+            local whirl = Vector3.new(3876.28, 35.11, -1939.32)
+            if (hrp.Position - whirl).Magnitude < 12 then
+                getgenv().WhirlSince = getgenv().WhirlSince or os.clock()
+            else
+                getgenv().WhirlSince = nil
+            end
+            if not getgenv().WhirlSince or os.clock() - getgenv().WhirlSince < 8 then
+                a = CFrame.new(whirl)
+                viaWhirlpool = true
+            end
+        end
+
         -- [FIXED - theo yêu cầu boss man: "bỏ bypass teleport"] Đã xoá hẳn
         -- nhánh BypassTP (dist>=4000 → đổi spawn point) — không còn dùng
         -- cơ chế bypass qua spawn point nữa, mọi khoảng cách đều tween bình
@@ -1897,7 +1914,7 @@ end
             bv.Velocity = Vector3.zero
             bv.Parent = head
         end
-        if CaculateDistance(a) > 500 then
+        if CaculateDistance(a) > 500 and not viaWhirlpool then
             if SeaIndex == 3 and not ScriptStorage.Backpack['Valkyrie Helm'] then
             elseif SeaIndex ~= 3 then
                 GetPortal(a)
