@@ -2460,6 +2460,7 @@ end
     -- -> "Pay $500,000" (o BuyElectro normal do script continua como reserva).
     -- Só corre no Sea 1 (as nuvens ficam em Skylands).
     -- ============================================================
+    local MeleeBlock = {} -- [FIX] melee que não deu para comprar fica em pausa (e o script farma) em vez de repetir para sempre
     local ElectroQuestStep -- (um só local fora do bloco: evita o limite de 200 locals da função)
     do
     local ElectroQuest = {taken = false, takenAt = 0, delivered = false, fails = 0, lastScan = 0, cloud = nil, debugged = false}
@@ -2598,6 +2599,21 @@ end
             return true
         end
         getgenv().ElectroQuestActive = os.clock() -- carimbo de tempo: expira sozinho se a tarefa mudar
+        ElectroQuest.startedAt = ElectroQuest.startedAt or os.clock()
+        if os.clock() - ElectroQuest.startedAt > 420 then
+            -- 7 min sem concluir: desiste por 15 min e deixa o script farmar
+            warn("[BombaCat Electro] missão sem progresso há 7 min; pausa de 15 min.")
+            ElectroQuest.startedAt, ElectroQuest.taken, ElectroQuest.fails = nil, false, 0
+            MeleeBlock["Electro"] = os.clock() + 900
+            getgenv().ElectroQuestActive = false
+            return true
+        end
+        if os.clock() - (ElectroQuest.lastLog or 0) > 5 then
+            ElectroQuest.lastLog = os.clock()
+            print(string.format("[BombaCat Electro] bolt=%d taken=%s delivered=%s distNPC=%d Beli=%s",
+                ElectroBoltCount(), tostring(ElectroQuest.taken), tostring(ElectroQuest.delivered),
+                CaculateDistance(ElectroNPCCFrame()), tostring(ScriptStorage.PlayerData.Beli)))
+        end
 
         local npcCF = ElectroNPCCFrame()
 
@@ -2614,7 +2630,7 @@ end
             if btn then ElectroClickGui(btn); task.wait(1) end
             local pay = ElectroFindGui({"pay $500,000", "pay $500"})
             if pay then ElectroClickGui(pay); task.wait(0.5) end
-            if ElectroBoltCount() == 0 then ElectroQuest.delivered = true; getgenv().ElectroQuestActive = false end
+            if ElectroBoltCount() == 0 then ElectroQuest.delivered = true; ElectroQuest.startedAt = nil; getgenv().ElectroQuestActive = false end
             return false
         end
 
@@ -2821,6 +2837,11 @@ end
 
             local bp = CheckItem(melee.name)
             if not bp then
+                if MeleeBlock[melee.name] and os.clock() < MeleeBlock[melee.name] then
+                    SetTask('SubTask', 'Auto Full Melee | ' .. melee.name .. ' em pausa — a farmar Beli/nível')
+                    farmWith(trainName)
+                    return
+                end
                 -- [NEW] Dragon Claw V1 cần riêng 1500 Fragments — nếu chưa
                 -- đủ thì đây chính là lý do phải farm raid (raid cho
                 -- Fragments), không phải lỗi gì khác
@@ -2980,6 +3001,13 @@ end
                         end
                     else
                         SetTask('SubTask', 'Auto Full Melee | Đã gửi lệnh mua ' .. melee.name .. ' — kiểm tra lại vòng sau')
+                        local fk = melee.name .. "#falhas"
+                        MeleeBlock[fk] = (MeleeBlock[fk] or 0) + 1
+                        if MeleeBlock[fk] >= 3 then
+                            MeleeBlock[fk] = 0
+                            MeleeBlock[melee.name] = os.clock() + 600
+                            warn("[BombaCat] Compra de " .. melee.name .. " falhou 3 vezes; pausa de 10 min (o script volta a farmar).")
+                        end
                     end
                 else
                     -- [FIXED] Không còn set _G.Level=true (khóa vĩnh viễn) —
