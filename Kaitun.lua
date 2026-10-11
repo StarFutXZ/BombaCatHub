@@ -1874,6 +1874,63 @@ end
     -- ============================================================
     -- [FIXED] TWEEN CONTROLLER - movimento contínuo e colisões restauradas
     -- ============================================================
+    -- [NEW] Whirlpool da Underwater City (Sea 1): procura a peça real no mapa, toca nela e dispara o mesmo
+    -- remote que o jogo usa ao entrar no portal. Imprime na consola as peças encontradas ([BombaCat Whirlpool]).
+    BombaWhirl = {pos = Vector3.new(3864.69, 6.74, -1926.21), scanned = false}
+    function BombaWhirl.scan(character)
+        if BombaWhirl.scanned then return end
+        BombaWhirl.scanned = true
+        pcall(function()
+            local base = BombaWhirl.pos
+            local best, bestScore, bestDist = nil, 0, math.huge
+            local lines = {}
+            for _, part in ipairs(workspace:GetPartBoundsInRadius(base, 400)) do
+                if not part:IsDescendantOf(character) then
+                    local n = string.lower(part.Name) .. "|" .. string.lower(part.Parent and part.Parent.Name or "")
+                    local score = 0
+                    if string.find(n, "whirl", 1, true) or string.find(n, "vortex", 1, true) or string.find(n, "swirl", 1, true) then
+                        score = 3
+                    elseif string.find(n, "portal", 1, true) or string.find(n, "entrance", 1, true) or string.find(n, "underwater", 1, true) then
+                        score = 2
+                    elseif part:FindFirstChildOfClass("TouchInterest") then
+                        score = 1
+                    end
+                    if score > 0 then
+                        local d = (part.Position - base).Magnitude
+                        if #lines < 12 then
+                            lines[#lines + 1] = string.format("%s/%s @ %d,%d,%d score=%d", part.Parent and part.Parent.Name or "?", part.Name,
+                                math.floor(part.Position.X), math.floor(part.Position.Y), math.floor(part.Position.Z), score)
+                        end
+                        if score > bestScore or (score == bestScore and d < bestDist) then
+                            best, bestScore, bestDist = part, score, d
+                        end
+                    end
+                end
+            end
+            print("[BombaCat Whirlpool] peças candidatas: " .. (#lines > 0 and table.concat(lines, " || ") or "nenhuma"))
+            if best and bestScore >= 2 then
+                BombaWhirl.pos = best.Position
+                print("[BombaCat Whirlpool] alvo escolhido: " .. best.Name)
+            end
+        end)
+    end
+    function BombaWhirl.enter(hrp, character)
+        if typeof(firetouchinterest) == "function" then
+            pcall(function()
+                for _, part in ipairs(workspace:GetPartBoundsInRadius(hrp.Position, 40)) do
+                    if part:FindFirstChildOfClass("TouchInterest") and not part:IsDescendantOf(character) then
+                        firetouchinterest(hrp, part, 0)
+                        task.wait()
+                        firetouchinterest(hrp, part, 1)
+                    end
+                end
+            end)
+        end
+        pcall(function()
+            Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(61163.8515625, 11.759522438049316, 1819.7841796875))
+        end)
+    end
+
     local activeTweenTarget = nil
     function TweenController.Create(W)
         if not W or TweenDebounce then return end
@@ -1890,28 +1947,22 @@ end
         -- teleportar, volta ao método antigo como reserva.
         local viaWhirlpool = false
         if SeaIndex == 1 and a.Position.X > 50000 and hrp.Position.X < 50000 then
-            -- Whirlpool ao nível da água (antes usava Y=35, 29 studs acima, e nunca "entrava" nele)
-            local whirl = Vector3.new(3864.69, 6.74, -1926.21)
-            local dW = (hrp.Position - whirl).Magnitude
-            if dW < 25 then
-                getgenv().WhirlSince = getgenv().WhirlSince or os.clock()
-                -- tenta tocar na peça do Whirlpool (precisa de firetouchinterest no executor)
-                if typeof(firetouchinterest) == "function" and os.clock() - (getgenv().WhirlTouchAt or 0) > 1 then
+            BombaWhirl.scan(character)
+            local since = getgenv().WhirlSince
+            -- a cada 5 s junto ao Whirlpool alterna entre o nível da água e 28 studs acima (o portal pode estar mais alto)
+            local up = (since and math.floor((os.clock() - since) / 5) % 2 == 1) and 28 or 0
+            local whirl = BombaWhirl.pos + Vector3.new(0, up, 0)
+            local dW = (hrp.Position - BombaWhirl.pos).Magnitude
+            if dW < 45 then
+                getgenv().WhirlSince = since or os.clock()
+                if os.clock() - (getgenv().WhirlTouchAt or 0) > 1.5 then
                     getgenv().WhirlTouchAt = os.clock()
-                    pcall(function()
-                        for _, part in ipairs(workspace:GetPartBoundsInRadius(whirl, 60)) do
-                            if part:FindFirstChildOfClass("TouchInterest") and not part:IsDescendantOf(character) then
-                                firetouchinterest(hrp, part, 0)
-                                task.wait()
-                                firetouchinterest(hrp, part, 1)
-                            end
-                        end
-                    end)
+                    BombaWhirl.enter(hrp, character)
                 end
             else
                 getgenv().WhirlSince = nil
             end
-            if not getgenv().WhirlSince or os.clock() - getgenv().WhirlSince < 10 then
+            if not getgenv().WhirlSince or os.clock() - getgenv().WhirlSince < 20 then
                 a = CFrame.new(whirl)
                 viaWhirlpool = true
                 if os.clock() - (getgenv().WhirlLog or 0) > 5 then
@@ -1920,7 +1971,7 @@ end
                 end
             elseif os.clock() - (getgenv().WhirlLog or 0) > 5 then
                 getgenv().WhirlLog = os.clock()
-                print("[BombaCat Whirlpool] 10 s no Whirlpool sem teleportar; a usar o portal antigo como reserva.")
+                print("[BombaCat Whirlpool] 20 s no Whirlpool sem teleportar; a usar o portal antigo como reserva.")
             end
         elseif hrp.Position.X >= 50000 then
             getgenv().WhirlSince = nil
