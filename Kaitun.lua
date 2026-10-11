@@ -1877,6 +1877,9 @@ end
     local activeTweenTarget = nil
     function TweenController.Create(W)
         if not W or TweenDebounce then return end
+        -- [FIX Electro] enquanto a missão do Electro está ativa, só ela move o personagem
+        local eqa = getgenv().ElectroQuestActive
+        if eqa and os.clock() - eqa < 3 and not getgenv().ElectroTweenCall then return end
         local a = typeof(W) ~= 'CFrame' and ConvertTo(CFrame, W) or W
         local character = game.Players.LocalPlayer.Character
         local hrp = character and character:FindFirstChild("HumanoidRootPart")
@@ -2463,6 +2466,14 @@ end
     local ELECTRO_NPC = "Mad Scientist"
     local ELECTRO_FALLBACK_CF = CFrame.new(-4842.112, 717.670, -2623.149)
 
+    -- Só a missão do Electro pode mover o personagem enquanto estiver ativa (evita 2 tweens a disputar o bloco e o personagem ficar parado no ar)
+    local function ElectroMove(cf)
+        getgenv().ElectroTweenCall = true
+        local ok, err = pcall(TweenController.Create, cf)
+        getgenv().ElectroTweenCall = false
+        if not ok then warn("[BombaCat Electro] tween falhou: " .. tostring(err)) end
+    end
+
     local function ElectroBoltCount()
         local e = ScriptStorage.Backpack and ScriptStorage.Backpack["Lightning Bolt"]
         if type(e) == "table" then return e.Count or 1 end
@@ -2594,7 +2605,7 @@ end
         if ElectroBoltCount() > 0 then
             if CaculateDistance(npcCF) > 12 then
                 SetTask('MainTask', 'Auto Full Melee | Electro: levar o Lightning Bolt ao Mad Scientist')
-                TweenController.Create(npcCF)
+                ElectroMove(npcCF)
                 return false
             end
             SetTask('MainTask', 'Auto Full Melee | Electro: entregar o Lightning Bolt')
@@ -2611,7 +2622,7 @@ end
         if not ElectroQuest.taken or os.clock() - ElectroQuest.takenAt > 240 then
             if CaculateDistance(npcCF) > 12 then
                 SetTask('MainTask', 'Auto Full Melee | Electro: ir ao Mad Scientist (Skylands)')
-                TweenController.Create(npcCF)
+                ElectroMove(npcCF)
                 return false
             end
             SetTask('MainTask', 'Auto Full Melee | Electro: aceitar a missão do Lightning Bolt')
@@ -2644,7 +2655,7 @@ end
         local cloud = ElectroFindCloud()
         if cloud then
             SetTask('MainTask', 'Auto Full Melee | Electro: a partir uma nuvem de tempestade')
-            TweenController.Create(cloud.CFrame * CFrame.new(0, 0, 6))
+            ElectroMove(cloud.CFrame * CFrame.new(0, 0, 6))
             if CaculateDistance(cloud.CFrame) < 25 then
                 local tool = _G.SelectWeapon
                 if tool then pcall(function() FunctionsHandler.LocalPlayerController.Methods.EquipTool:Call(tool) end) end
@@ -2652,7 +2663,7 @@ end
             end
         else
             SetTask('MainTask', 'Auto Full Melee | Electro: à procura de nuvens carregadas em Skylands')
-            TweenController.Create(npcCF * CFrame.new(0, 150, 0))
+            ElectroMove(npcCF * CFrame.new(0, 150, 0))
         end
         return false
     end
@@ -3585,6 +3596,8 @@ end
     -- Ánh xạ: plr.Data.Level.Value → ScriptStorage.PlayerData.Level
     -- ══════════════════════════════════════════════════════════════════
     FunctionsHandler.LevelFarm:RegisterMethod("Refresh", function()
+        local eqa = getgenv().ElectroQuestActive
+        if eqa and os.clock() - eqa < 3 then return nil end -- [FIX Electro] missão do Electro tem prioridade total
         -- Guard chống xung đột AutoSea3/AutoSea2
         if _G.SeaTransitionActive then return nil end
 
