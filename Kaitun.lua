@@ -125,7 +125,7 @@ _G.SelectWeapon = nil
 task.spawn(function()
     while task.wait(0.5) do
         pcall(function()
-            local bp = LocalPlayer:FindFirstChild("Backpack")
+            local bp = lp:FindFirstChild("Backpack")
             if not bp then return end
             if _G.ChooseWP == "Melee" then
                 for _, v in pairs(bp:GetChildren()) do
@@ -2449,6 +2449,208 @@ end
         return true
     end)
 
+
+    -- ============================================================
+    -- [NEW] ELECTRO — missão do Lightning Bolt (update novo do Blox Fruits)
+    -- Fluxo: falar com o Mad Scientist -> "I'll get you one" -> partir uma
+    -- nuvem de tempestade carregada em Skylands -> voltar e "Hand it over"
+    -- -> "Pay $500,000" (o BuyElectro normal do script continua como reserva).
+    -- Só corre no Sea 1 (as nuvens ficam em Skylands).
+    -- ============================================================
+    local ElectroQuestStep -- (um só local fora do bloco: evita o limite de 200 locals da função)
+    do
+    local ElectroQuest = {taken = false, takenAt = 0, delivered = false, fails = 0, lastScan = 0, cloud = nil, debugged = false}
+    local ELECTRO_NPC = "Mad Scientist"
+    local ELECTRO_FALLBACK_CF = CFrame.new(-4842.112, 717.670, -2623.149)
+
+    local function ElectroBoltCount()
+        local e = ScriptStorage.Backpack and ScriptStorage.Backpack["Lightning Bolt"]
+        if type(e) == "table" then return e.Count or 1 end
+        if e then return 1 end
+        return CheckItem("Lightning Bolt") and 1 or 0
+    end
+
+    local function ElectroNPCCFrame()
+        local ok, cf = pcall(function()
+            local npc = workspace.NPCs:FindFirstChild(ELECTRO_NPC)
+            if npc then return npc:GetPivot() end
+        end)
+        if ok and cf then return cf end
+        return ELECTRO_FALLBACK_CF
+    end
+
+    -- Procura um botão/etiqueta visível no PlayerGui cujo texto contenha um dos padrões.
+    local function ElectroFindGui(patterns)
+        local pg = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
+        if not pg then return nil end
+        for _, d in ipairs(pg:GetDescendants()) do
+            if (d:IsA("TextButton") or d:IsA("TextLabel")) and type(d.Text) == "string" and d.Text ~= "" then
+                local t = string.lower(d.Text)
+                for _, p in ipairs(patterns) do
+                    if string.find(t, p, 1, true) then
+                        local btn = d:IsA("GuiButton") and d or d:FindFirstAncestorWhichIsA("GuiButton")
+                        local visible = true
+                        local node = d
+                        while node and node:IsA("GuiObject") do
+                            if not node.Visible then visible = false break end
+                            node = node.Parent
+                        end
+                        if visible then return btn or d, d end
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
+    local function ElectroClickGui(btn)
+        if not btn or not btn:IsA("GuiButton") then return false end
+        local fired = false
+        if typeof(getconnections) == "function" then
+            for _, sig in ipairs({btn.MouseButton1Click, btn.Activated, btn.MouseButton1Down, btn.MouseButton1Up}) do
+                local okC, conns = pcall(getconnections, sig)
+                if okC and conns then
+                    for _, c in ipairs(conns) do
+                        if pcall(function() c:Fire() end) then fired = true end
+                    end
+                end
+            end
+        end
+        if not fired and typeof(firesignal) == "function" then
+            fired = pcall(firesignal, btn.MouseButton1Click) or pcall(firesignal, btn.Activated)
+        end
+        return fired
+    end
+
+    local function ElectroTalk()
+        local npc = workspace.NPCs:FindFirstChild(ELECTRO_NPC)
+        if not npc then return false end
+        local prompt = npc:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if prompt and typeof(fireproximityprompt) == "function" then pcall(fireproximityprompt, prompt) end
+        local cd = npc:FindFirstChildWhichIsA("ClickDetector", true)
+        if cd and typeof(fireclickdetector) == "function" then pcall(fireclickdetector, cd) end
+        return true
+    end
+
+    -- Nuvens de tempestade carregadas (heurística: nome com "cloud" + efeito de relâmpago/luz).
+    -- Se o jogo usar outros nomes, o debug abaixo imprime os candidatos na consola.
+    local function ElectroFindCloud()
+        local char = game.Players.LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return nil end
+        if ElectroQuest.cloud and ElectroQuest.cloud.Parent and os.clock() - ElectroQuest.lastScan < 3 then
+            return ElectroQuest.cloud
+        end
+        ElectroQuest.lastScan = os.clock()
+        local best, bestDist, seen = nil, math.huge, {}
+        for i, o in ipairs(workspace:GetDescendants()) do
+            if i % 4000 == 0 then task.wait() end
+            if o:IsA("BasePart") then
+                local n = string.lower(o.Name)
+                if string.find(n, "cloud", 1, true) or string.find(n, "storm", 1, true) or string.find(n, "thunder", 1, true) or string.find(n, "lightning", 1, true) then
+                    local charged = string.find(n, "storm", 1, true) or string.find(n, "thunder", 1, true) or string.find(n, "lightning", 1, true) or string.find(n, "charged", 1, true)
+                        or o:FindFirstChildWhichIsA("Beam", true) or o:FindFirstChildWhichIsA("PointLight", true)
+                        or o:FindFirstChildWhichIsA("ParticleEmitter", true) or o:FindFirstChildWhichIsA("ClickDetector", true)
+                    if o.Position.Y > 300 then
+                        if not seen[o.Name] then seen[o.Name] = true end
+                        if charged then
+                            local d = (o.Position - hrp.Position).Magnitude
+                            if d < bestDist then best, bestDist = o, d end
+                        end
+                    end
+                end
+            end
+        end
+        if not ElectroQuest.debugged then
+            ElectroQuest.debugged = true
+            local names = {}
+            for k in pairs(seen) do names[#names + 1] = k end
+            print("[BombaCat Electro] nomes de nuvens/tempestade encontrados em Skylands: " .. (#names > 0 and table.concat(names, ", ") or "nenhum"))
+        end
+        ElectroQuest.cloud = best
+        return best
+    end
+
+    local function ElectroHitCloud()
+        local vim = game:GetService("VirtualInputManager")
+        pcall(function() vim:SendMouseButtonEvent(500, 400, 0, true, game, 0) end)
+        task.wait(0.05)
+        pcall(function() vim:SendMouseButtonEvent(500, 400, 0, false, game, 0) end)
+    end
+
+    -- Devolve true quando o Electro já pode seguir para a compra normal.
+    ElectroQuestStep = function()
+        if SeaIndex ~= 1 or ElectroQuest.delivered then return true end
+
+        local npcCF = ElectroNPCCFrame()
+
+        -- 1) Já tem o Lightning Bolt: entregar
+        if ElectroBoltCount() > 0 then
+            if CaculateDistance(npcCF) > 12 then
+                SetTask('MainTask', 'Auto Full Melee | Electro: levar o Lightning Bolt ao Mad Scientist')
+                TweenController.Create(npcCF)
+                return false
+            end
+            SetTask('MainTask', 'Auto Full Melee | Electro: entregar o Lightning Bolt')
+            ElectroTalk(); task.wait(0.8)
+            local btn = ElectroFindGui({"hand it over"})
+            if btn then ElectroClickGui(btn); task.wait(1) end
+            local pay = ElectroFindGui({"pay $500,000", "pay $500"})
+            if pay then ElectroClickGui(pay); task.wait(0.5) end
+            if ElectroBoltCount() == 0 then ElectroQuest.delivered = true end
+            return false
+        end
+
+        -- 2) Ainda não aceitou a missão: falar com o Mad Scientist
+        if not ElectroQuest.taken or os.clock() - ElectroQuest.takenAt > 240 then
+            if CaculateDistance(npcCF) > 12 then
+                SetTask('MainTask', 'Auto Full Melee | Electro: ir ao Mad Scientist (Skylands)')
+                TweenController.Create(npcCF)
+                return false
+            end
+            SetTask('MainTask', 'Auto Full Melee | Electro: aceitar a missão do Lightning Bolt')
+            ElectroTalk(); task.wait(0.8)
+            -- Já entregou antes (só falta pagar)?
+            local pay = ElectroFindGui({"pay $500,000", "pay $500"})
+            if pay then
+                ElectroQuest.delivered = true
+                ElectroClickGui(pay)
+                return false
+            end
+            local accept = ElectroFindGui({"i'll get you one", "ill get you one", "get you one"})
+            if accept then
+                ElectroClickGui(accept); task.wait(0.8)
+                ElectroQuest.taken, ElectroQuest.takenAt, ElectroQuest.fails = true, os.clock(), 0
+            else
+                ElectroQuest.fails = ElectroQuest.fails + 1
+                if ElectroQuest.fails >= 4 then
+                    -- Não achou as opções de diálogo: deixa o BuyElectro normal tentar, sem bloquear o script
+                    warn("[BombaCat Electro] não encontrei o diálogo do Mad Scientist; a usar a compra normal.")
+                    ElectroQuest.delivered = true
+                    return true
+                end
+            end
+            return false
+        end
+
+        -- 3) Missão ativa: caçar uma nuvem carregada em Skylands
+        local cloud = ElectroFindCloud()
+        if cloud then
+            SetTask('MainTask', 'Auto Full Melee | Electro: a partir uma nuvem de tempestade')
+            TweenController.Create(cloud.CFrame * CFrame.new(0, 0, 6))
+            if CaculateDistance(cloud.CFrame) < 25 then
+                local tool = _G.SelectWeapon
+                if tool then pcall(function() FunctionsHandler.LocalPlayerController.Methods.EquipTool:Call(tool) end) end
+                ElectroHitCloud()
+            end
+        else
+            SetTask('MainTask', 'Auto Full Melee | Electro: à procura de nuvens carregadas em Skylands')
+            TweenController.Create(npcCF * CFrame.new(0, 150, 0))
+        end
+        return false
+    end
+    end -- fim do bloco do Electro
+
     FunctionsHandler.MeleesController:RegisterMethod("Start", function()
         if not Config.Items.AutoFullyMelees or not Config.Melee.AutoBuy then return end
         -- [FIX] melee que precisa de mastery (o treino a sério acontece no fim, ver abaixo)
@@ -2481,7 +2683,7 @@ end
             -- nên trước đây KHÔNG BAO GIỜ khớp, luôn rơi vào nhánh generic
             -- sai. Bỏ hẳn tiền tố "Buy" khỏi key — để BuyMelee tự thêm.
             {name = "Black Leg", key = "BlackLeg", price = {Beli = 150000}, levelReq = 300},
-            {name = "Electro", key = "Electro", price = {Beli = 500000}, levelReq = 300},
+            {name = "Electro", key = "Electro", price = {Beli = 500000}, levelReq = 300, needLightningBolt = true},
             {name = "Fishman Karate", key = "FishmanKarate", price = {Beli = 750000}, levelReq = 300},
             {name = "Dragon Claw", key = "DragonClaw", price = {Fragments = 1500}, levelReq = 300},
             {name = "Superhuman", key = "Superhuman", price = {Beli = 3000000}, levelReq = nil, needMastery = {item = "Dragon Claw", value = 300}},
@@ -2529,7 +2731,7 @@ end
                 [3] = CFrame.new(-5023.91, 371.02, -3191.46),
             },
             ["Mad Scientist"] = {
-                [1] = CFrame.new(-5382.79, 12.55, -2148.82),
+                [1] = CFrame.new(-4842.112, 717.670, -2623.149), -- [FIX] ilha mais baixa de Skylands (igual à tabela do Electro, linha ~350)
                 [2] = CFrame.new(-4866.16, 33.92, -4767.11),
                 [3] = CFrame.new(-4996.06, 313.21, -3201.83),
             },
@@ -2644,6 +2846,11 @@ end
 
                 -- [NEW] Điều kiện tiên quyết mastery — verified từ raw_6:
                 -- Superhuman cần Dragon Claw đạt 300 mastery trước khi mua
+                -- [NEW] Electro: missão do Lightning Bolt antes da compra
+                if melee.needLightningBolt then
+                    if not ElectroQuestStep() then return end
+                end
+
                 if melee.needMastery then
                     local preMastery = ScriptStorage.Melees[melee.needMastery.item] or 0
                     if not CheckItem(melee.needMastery.item) or preMastery < melee.needMastery.value then
