@@ -19,14 +19,14 @@ Config = {
         AutoRandomFruit = true,
     },
     Sword = {
-        ["Shark Saw"]        = false,
-        ["Wardens Sword"]    = false,
-        ["Pole (1st Form)"]  = false,
-        ["Gravity Blade"]    = false,
-        ["Longsword"]        = false,
-        ["Rengoku"]          = false,
-        ["Flail"]            = false,
-        ["Twin Hooks"]       = false,
+        ["Shark Saw"]        = true,
+        ["Wardens Sword"]    = true,
+        ["Pole (1st Form)"]  = true,
+        ["Gravity Blade"]    = true,
+        ["Longsword"]        = true,
+        ["Rengoku"]          = true,
+        ["Flail"]            = true,
+        ["Twin Hooks"]       = true,
     },
     BossWeapons = {
         ["Awakened Ice Admiral"] = true,
@@ -2580,7 +2580,13 @@ end
 
     -- Devolve true quando o Electro já pode seguir para a compra normal.
     ElectroQuestStep = function()
-        if SeaIndex ~= 1 or ElectroQuest.delivered then return true end
+        if SeaIndex ~= 1 or ElectroQuest.delivered then getgenv().ElectroQuestActive = false return true end
+        -- Sem 500k Beli e sem a missão em curso: não interrompe o farm de nível (que dá Beli)
+        if (ScriptStorage.PlayerData.Beli or 0) < 500000 and ElectroBoltCount() == 0 and not ElectroQuest.taken then
+            getgenv().ElectroQuestActive = false
+            return true
+        end
+        getgenv().ElectroQuestActive = os.clock() -- carimbo de tempo: expira sozinho se a tarefa mudar
 
         local npcCF = ElectroNPCCFrame()
 
@@ -2597,7 +2603,7 @@ end
             if btn then ElectroClickGui(btn); task.wait(1) end
             local pay = ElectroFindGui({"pay $500,000", "pay $500"})
             if pay then ElectroClickGui(pay); task.wait(0.5) end
-            if ElectroBoltCount() == 0 then ElectroQuest.delivered = true end
+            if ElectroBoltCount() == 0 then ElectroQuest.delivered = true; getgenv().ElectroQuestActive = false end
             return false
         end
 
@@ -2627,6 +2633,7 @@ end
                     -- Não achou as opções de diálogo: deixa o BuyElectro normal tentar, sem bloquear o script
                     warn("[BombaCat Electro] não encontrei o diálogo do Mad Scientist; a usar a compra normal.")
                     ElectroQuest.delivered = true
+                    getgenv().ElectroQuestActive = false
                     return true
                 end
             end
@@ -6959,7 +6966,7 @@ local lastMelee = 0
 
 task.spawn(function()
     while task.wait(CFG.LoopDelay) do
-        if not CFG.Enabled then continue end
+        if not CFG.Enabled or (getgenv().ElectroQuestActive and os.clock() - getgenv().ElectroQuestActive < 3) then continue end
 
         local char = LocalPlayer.Character
         if not char or not isAlive(char) then continue end
