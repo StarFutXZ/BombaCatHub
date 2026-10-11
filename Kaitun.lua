@@ -1874,14 +1874,19 @@ end
     -- ============================================================
     -- [FIXED] TWEEN CONTROLLER - movimento contínuo e colisões restauradas
     -- ============================================================
-    -- [NEW] Whirlpool da Underwater City (Sea 1): procura a peça real no mapa, toca nela e dispara o mesmo
-    -- remote que o jogo usa ao entrar no portal. Imprime na consola as peças encontradas ([BombaCat Whirlpool]).
-    BombaWhirl = {pos = Vector3.new(3864.69, 6.74, -1926.21), scanned = false}
-    function BombaWhirl.scan(character)
-        if BombaWhirl.scanned then return end
-        BombaWhirl.scanned = true
+    -- [NEW] Whirlpool / portal da Underwater City (Sea 1), nos dois sentidos:
+    --   enter: mar -> Whirlpool -> ilha submersa;  exit: ilha submersa -> portal -> mar.
+    -- Procura a peça real no mapa, toca nela e dispara o mesmo remote que o jogo usa ao entrar no portal.
+    -- Imprime na consola as peças encontradas ([BombaCat Whirlpool]).
+    BombaWhirl = {sites = {
+        enter = {name = "entrada", pos = Vector3.new(3864.69, 6.74, -1926.21), dest = Vector3.new(61163.8515625, 11.759522438049316, 1819.7841796875)},
+        exit  = {name = "saída", pos = Vector3.new(61163.85, 11.76, 1819.78), dest = Vector3.new(3876.280517578125, 35.10614013671875, -1939.3201904296875)},
+    }}
+    function BombaWhirl.scan(character, site)
+        if site.scanned then return end
+        site.scanned = true
         pcall(function()
-            local base = BombaWhirl.pos
+            local base = site.pos
             local best, bestScore, bestDist = nil, 0, math.huge
             local lines = {}
             for _, part in ipairs(workspace:GetPartBoundsInRadius(base, 400)) do
@@ -1890,7 +1895,7 @@ end
                     local score = 0
                     if string.find(n, "whirl", 1, true) or string.find(n, "vortex", 1, true) or string.find(n, "swirl", 1, true) then
                         score = 3
-                    elseif string.find(n, "portal", 1, true) or string.find(n, "entrance", 1, true) or string.find(n, "underwater", 1, true) then
+                    elseif string.find(n, "portal", 1, true) or string.find(n, "entrance", 1, true) or string.find(n, "underwater", 1, true) or string.find(n, "exit", 1, true) then
                         score = 2
                     elseif part:FindFirstChildOfClass("TouchInterest") then
                         score = 1
@@ -1907,14 +1912,14 @@ end
                     end
                 end
             end
-            print("[BombaCat Whirlpool] peças candidatas: " .. (#lines > 0 and table.concat(lines, " || ") or "nenhuma"))
+            print("[BombaCat Whirlpool] (" .. site.name .. ") peças candidatas: " .. (#lines > 0 and table.concat(lines, " || ") or "nenhuma"))
             if best and bestScore >= 2 then
-                BombaWhirl.pos = best.Position
-                print("[BombaCat Whirlpool] alvo escolhido: " .. best.Name)
+                site.pos = best.Position
+                print("[BombaCat Whirlpool] (" .. site.name .. ") alvo escolhido: " .. best.Name)
             end
         end)
     end
-    function BombaWhirl.enter(hrp, character)
+    function BombaWhirl.enter(hrp, character, site)
         if typeof(firetouchinterest) == "function" then
             pcall(function()
                 for _, part in ipairs(workspace:GetPartBoundsInRadius(hrp.Position, 40)) do
@@ -1926,9 +1931,7 @@ end
                 end
             end)
         end
-        pcall(function()
-            Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(61163.8515625, 11.759522438049316, 1819.7841796875))
-        end)
+        pcall(function() Remotes.CommF_:InvokeServer("requestEntrance", site.dest) end)
     end
 
     local activeTweenTarget = nil
@@ -1946,35 +1949,43 @@ end
         -- voa até ao Whirlpool no mar e entra nele (o jogo teleporta). Se ficar 8 s no Whirlpool sem
         -- teleportar, volta ao método antigo como reserva.
         local viaWhirlpool = false
-        if SeaIndex == 1 and a.Position.X > 50000 and hrp.Position.X < 50000 then
-            BombaWhirl.scan(character)
-            local since = getgenv().WhirlSince
-            -- a cada 5 s junto ao Whirlpool alterna entre o nível da água e 28 studs acima (o portal pode estar mais alto)
+        local whirlSite = nil
+        if SeaIndex == 1 then
+            if a.Position.X > 50000 and hrp.Position.X < 50000 then
+                whirlSite = BombaWhirl.sites.enter
+            elseif a.Position.X < 50000 and hrp.Position.X > 50000 then
+                whirlSite = BombaWhirl.sites.exit
+            end
+        end
+        if whirlSite then
+            BombaWhirl.scan(character, whirlSite)
+            local since = whirlSite.since
+            -- a cada 5 s junto ao portal alterna entre o nível base e 28 studs acima
             local up = (since and math.floor((os.clock() - since) / 5) % 2 == 1) and 28 or 0
-            local whirl = BombaWhirl.pos + Vector3.new(0, up, 0)
-            local dW = (hrp.Position - BombaWhirl.pos).Magnitude
+            local dW = (hrp.Position - whirlSite.pos).Magnitude
             if dW < 45 then
-                getgenv().WhirlSince = since or os.clock()
-                if os.clock() - (getgenv().WhirlTouchAt or 0) > 1.5 then
-                    getgenv().WhirlTouchAt = os.clock()
-                    BombaWhirl.enter(hrp, character)
+                whirlSite.since = since or os.clock()
+                if os.clock() - (whirlSite.touchAt or 0) > 1.5 then
+                    whirlSite.touchAt = os.clock()
+                    BombaWhirl.enter(hrp, character, whirlSite)
                 end
             else
-                getgenv().WhirlSince = nil
+                whirlSite.since = nil
             end
-            if not getgenv().WhirlSince or os.clock() - getgenv().WhirlSince < 20 then
-                a = CFrame.new(whirl)
+            if not whirlSite.since or os.clock() - whirlSite.since < 20 then
+                a = CFrame.new(whirlSite.pos + Vector3.new(0, up, 0))
                 viaWhirlpool = true
-                if os.clock() - (getgenv().WhirlLog or 0) > 5 then
-                    getgenv().WhirlLog = os.clock()
-                    print(string.format("[BombaCat Whirlpool] a ir para o Whirlpool | distância=%d", math.floor(dW)))
+                if os.clock() - (whirlSite.logAt or 0) > 5 then
+                    whirlSite.logAt = os.clock()
+                    print(string.format("[BombaCat Whirlpool] (%s) a ir para o portal | distância=%d", whirlSite.name, math.floor(dW)))
                 end
-            elseif os.clock() - (getgenv().WhirlLog or 0) > 5 then
-                getgenv().WhirlLog = os.clock()
-                print("[BombaCat Whirlpool] 20 s no Whirlpool sem teleportar; a usar o portal antigo como reserva.")
+            elseif os.clock() - (whirlSite.logAt or 0) > 5 then
+                whirlSite.logAt = os.clock()
+                print("[BombaCat Whirlpool] (" .. whirlSite.name .. ") 20 s no portal sem teleportar; a usar o portal antigo como reserva.")
             end
-        elseif hrp.Position.X >= 50000 then
-            getgenv().WhirlSince = nil
+        else
+            BombaWhirl.sites.enter.since = nil
+            BombaWhirl.sites.exit.since = nil
         end
 
         -- [FIXED - theo yêu cầu boss man: "bỏ bypass teleport"] Đã xoá hẳn
