@@ -1890,16 +1890,40 @@ end
         -- teleportar, volta ao método antigo como reserva.
         local viaWhirlpool = false
         if SeaIndex == 1 and a.Position.X > 50000 and hrp.Position.X < 50000 then
-            local whirl = Vector3.new(3876.28, 35.11, -1939.32)
-            if (hrp.Position - whirl).Magnitude < 12 then
+            -- Whirlpool ao nível da água (antes usava Y=35, 29 studs acima, e nunca "entrava" nele)
+            local whirl = Vector3.new(3864.69, 6.74, -1926.21)
+            local dW = (hrp.Position - whirl).Magnitude
+            if dW < 25 then
                 getgenv().WhirlSince = getgenv().WhirlSince or os.clock()
+                -- tenta tocar na peça do Whirlpool (precisa de firetouchinterest no executor)
+                if typeof(firetouchinterest) == "function" and os.clock() - (getgenv().WhirlTouchAt or 0) > 1 then
+                    getgenv().WhirlTouchAt = os.clock()
+                    pcall(function()
+                        for _, part in ipairs(workspace:GetPartBoundsInRadius(whirl, 60)) do
+                            if part:FindFirstChildOfClass("TouchInterest") and not part:IsDescendantOf(character) then
+                                firetouchinterest(hrp, part, 0)
+                                task.wait()
+                                firetouchinterest(hrp, part, 1)
+                            end
+                        end
+                    end)
+                end
             else
                 getgenv().WhirlSince = nil
             end
-            if not getgenv().WhirlSince or os.clock() - getgenv().WhirlSince < 8 then
+            if not getgenv().WhirlSince or os.clock() - getgenv().WhirlSince < 10 then
                 a = CFrame.new(whirl)
                 viaWhirlpool = true
+                if os.clock() - (getgenv().WhirlLog or 0) > 5 then
+                    getgenv().WhirlLog = os.clock()
+                    print(string.format("[BombaCat Whirlpool] a ir para o Whirlpool | distância=%d", math.floor(dW)))
+                end
+            elseif os.clock() - (getgenv().WhirlLog or 0) > 5 then
+                getgenv().WhirlLog = os.clock()
+                print("[BombaCat Whirlpool] 10 s no Whirlpool sem teleportar; a usar o portal antigo como reserva.")
             end
+        elseif hrp.Position.X >= 50000 then
+            getgenv().WhirlSince = nil
         end
 
         -- [FIXED - theo yêu cầu boss man: "bỏ bypass teleport"] Đã xoá hẳn
