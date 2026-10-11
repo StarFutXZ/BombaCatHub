@@ -19,14 +19,14 @@ Config = {
         AutoRandomFruit = true,
     },
     Sword = {
-        ["Shark Saw"]        = false,
-        ["Wardens Sword"]    = false,
-        ["Pole (1st Form)"]  = false,
-        ["Gravity Blade"]    = false,
-        ["Longsword"]        = false,
-        ["Rengoku"]          = false,
-        ["Flail"]            = false,
-        ["Twin Hooks"]       = false,
+        ["Shark Saw"]        = true,
+        ["Wardens Sword"]    = true,
+        ["Pole (1st Form)"]  = true,
+        ["Gravity Blade"]    = true,
+        ["Longsword"]        = true,
+        ["Rengoku"]          = true,
+        ["Flail"]            = true,
+        ["Twin Hooks"]       = true,
     },
     BossWeapons = {
         ["Awakened Ice Admiral"] = true,
@@ -2465,7 +2465,7 @@ end
     do
     local ElectroQuest = {taken = false, takenAt = 0, delivered = false, fails = 0, lastScan = 0, cloud = nil, debugged = false}
     local ELECTRO_NPC = "Mad Scientist"
-    local ELECTRO_FALLBACK_CF = CFrame.new(-4842.112, 717.670, -2623.149)
+    local ELECTRO_FALLBACK_CF = CFrame.new(-5382.79, 12.55, -2148.82)
 
     -- Só a missão do Electro pode mover o personagem enquanto estiver ativa (evita 2 tweens a disputar o bloco e o personagem ficar parado no ar)
     local function ElectroMove(cf)
@@ -2484,7 +2484,7 @@ end
 
     local function ElectroNPCCFrame()
         local ok, cf = pcall(function()
-            local npc = workspace.NPCs:FindFirstChild(ELECTRO_NPC)
+            local npc = workspace.NPCs:FindFirstChild(ELECTRO_NPC) or (ScriptStorage.NPCs and ScriptStorage.NPCs[ELECTRO_NPC])
             if npc then return npc:GetPivot() end
         end)
         if ok and cf then return cf end
@@ -2515,30 +2515,69 @@ end
         return nil
     end
 
-    local function ElectroClickGui(btn)
-        if not btn or not btn:IsA("GuiButton") then return false end
+    local function ElectroClickGui(el)
+        if not el then return false end
         local fired = false
-        if typeof(getconnections) == "function" then
-            for _, sig in ipairs({btn.MouseButton1Click, btn.Activated, btn.MouseButton1Down, btn.MouseButton1Up}) do
-                local okC, conns = pcall(getconnections, sig)
-                if okC and conns then
-                    for _, c in ipairs(conns) do
-                        if pcall(function() c:Fire() end) then fired = true end
+        if el:IsA("GuiButton") then
+            if typeof(getconnections) == "function" then
+                for _, sig in ipairs({el.MouseButton1Click, el.Activated, el.MouseButton1Down, el.MouseButton1Up}) do
+                    local okC, conns = pcall(getconnections, sig)
+                    if okC and conns then
+                        for _, c in ipairs(conns) do
+                            if pcall(function() c:Fire() end) then fired = true end
+                        end
                     end
                 end
             end
+            if not fired and typeof(firesignal) == "function" then
+                fired = pcall(firesignal, el.MouseButton1Click) or pcall(firesignal, el.Activated)
+            end
         end
-        if not fired and typeof(firesignal) == "function" then
-            fired = pcall(firesignal, btn.MouseButton1Click) or pcall(firesignal, btn.Activated)
+        -- Reserva: clique real no centro do elemento (serve também para texto que não é GuiButton)
+        if el:IsA("GuiObject") then
+            local okV = pcall(function()
+                local inset = game:GetService("GuiService"):GetGuiInset()
+                local x = el.AbsolutePosition.X + el.AbsoluteSize.X / 2
+                local y = el.AbsolutePosition.Y + el.AbsoluteSize.Y / 2 + inset.Y
+                local vim = game:GetService("VirtualInputManager")
+                vim:SendMouseButtonEvent(x, y, 0, true, game, 0)
+                task.wait(0.05)
+                vim:SendMouseButtonEvent(x, y, 0, false, game, 0)
+            end)
+            fired = fired or okV
         end
         return fired
     end
 
+    -- Diagnóstico: imprime os textos visíveis no ecrã (para ver o que o diálogo realmente diz)
+    local function ElectroDumpTexts()
+        local pg = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
+        if not pg then return "" end
+        local out, n = {}, 0
+        for _, d in ipairs(pg:GetDescendants()) do
+            if (d:IsA("TextButton") or d:IsA("TextLabel")) and type(d.Text) == "string" and d.Text ~= "" and #d.Text < 80 then
+                local vis, node = true, d
+                while node and node:IsA("GuiObject") do
+                    if not node.Visible then vis = false break end
+                    node = node.Parent
+                end
+                if vis then
+                    n = n + 1
+                    out[#out + 1] = d.Text
+                    if n >= 30 then break end
+                end
+            end
+        end
+        local str = table.concat(out, " | ")
+        print("[BombaCat Electro] textos visíveis: " .. str)
+        return str
+    end
+
     local function ElectroTalk()
-        local npc = workspace.NPCs:FindFirstChild(ELECTRO_NPC)
+        local npc = workspace.NPCs:FindFirstChild(ELECTRO_NPC) or (ScriptStorage.NPCs and ScriptStorage.NPCs[ELECTRO_NPC])
         if not npc then return false end
         local prompt = npc:FindFirstChildWhichIsA("ProximityPrompt", true)
-        if prompt and typeof(fireproximityprompt) == "function" then pcall(fireproximityprompt, prompt) end
+        if prompt and typeof(fireproximityprompt) == "function" then pcall(function() prompt.HoldDuration = 0 end) pcall(fireproximityprompt, prompt) end
         local cd = npc:FindFirstChildWhichIsA("ClickDetector", true)
         if cd and typeof(fireclickdetector) == "function" then pcall(fireclickdetector, cd) end
         return true
@@ -2563,7 +2602,7 @@ end
                     local charged = string.find(n, "storm", 1, true) or string.find(n, "thunder", 1, true) or string.find(n, "lightning", 1, true) or string.find(n, "charged", 1, true)
                         or o:FindFirstChildWhichIsA("Beam", true) or o:FindFirstChildWhichIsA("PointLight", true)
                         or o:FindFirstChildWhichIsA("ParticleEmitter", true) or o:FindFirstChildWhichIsA("ClickDetector", true)
-                    if o.Position.Y > 300 then
+                    if o.Position.Y > 300 and o.Position.Y < 3000 then -- as nuvens não aparecem no Upper Skylands
                         if not seen[o.Name] then seen[o.Name] = true end
                         if charged then
                             local d = (o.Position - hrp.Position).Magnitude
@@ -2583,11 +2622,18 @@ end
         return best
     end
 
+    local ElectroKeyIdx = 0
     local function ElectroHitCloud()
         local vim = game:GetService("VirtualInputManager")
         pcall(function() vim:SendMouseButtonEvent(500, 400, 0, true, game, 0) end)
         task.wait(0.05)
         pcall(function() vim:SendMouseButtonEvent(500, 400, 0, false, game, 0) end)
+        -- A wiki indica que a nuvem pode precisar de um golpe com física destrutiva: roda as skills Z/X/C/V
+        local keys = {Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}
+        ElectroKeyIdx = ElectroKeyIdx % #keys + 1
+        pcall(function() vim:SendKeyEvent(true, keys[ElectroKeyIdx], false, game) end)
+        task.wait(0.1)
+        pcall(function() vim:SendKeyEvent(false, keys[ElectroKeyIdx], false, game) end)
     end
 
     -- Devolve true quando o Electro já pode seguir para a compra normal.
@@ -2642,7 +2688,7 @@ end
                 return false
             end
             SetTask('MainTask', 'Auto Full Melee | Electro: aceitar a missão do Lightning Bolt')
-            ElectroTalk(); task.wait(0.8)
+            ElectroTalk(); task.wait(1.2)
             -- Já entregou antes (só falta pagar)?
             local pay = ElectroFindGui({"pay $500,000", "pay $500"})
             if pay then
@@ -2650,16 +2696,21 @@ end
                 ElectroClickGui(pay)
                 return false
             end
-            local accept = ElectroFindGui({"i'll get you one", "ill get you one", "get you one"})
-            if accept then
-                ElectroClickGui(accept); task.wait(0.8)
+            local accept = ElectroFindGui({"i'll get you one", "i’ll get you one", "ill get you one", "get you one"})
+            if accept and ElectroClickGui(accept) then
+                task.wait(1)
                 ElectroQuest.taken, ElectroQuest.takenAt, ElectroQuest.fails = true, os.clock(), 0
+                print("[BombaCat Electro] missão aceite; a procurar nuvens.")
             else
                 ElectroQuest.fails = ElectroQuest.fails + 1
-                if ElectroQuest.fails >= 4 then
-                    -- Não achou as opções de diálogo: deixa o BuyElectro normal tentar, sem bloquear o script
-                    warn("[BombaCat Electro] não encontrei o diálogo do Mad Scientist; a usar a compra normal.")
-                    ElectroQuest.delivered = true
+                local seen = ElectroDumpTexts()
+                local okR, resp = pcall(function() return Remotes.CommF_:InvokeServer("BuyElectro", true) end)
+                print("[BombaCat Electro] BuyElectro(check) devolveu: " .. tostring(okR and resp))
+                SetTask('SubTask', ('Electro (tentativa ' .. ElectroQuest.fails .. '): check=' .. tostring(okR and resp) .. ' | ecrã: ' .. seen):sub(1, 170))
+                if ElectroQuest.fails >= 8 then
+                    warn("[BombaCat Electro] não consegui aceitar a missão (diálogo não encontrado); pausa de 5 min.")
+                    ElectroQuest.fails, ElectroQuest.startedAt = 0, nil
+                    MeleeBlock["Electro"] = os.clock() + 300
                     getgenv().ElectroQuestActive = false
                     return true
                 end
@@ -2671,7 +2722,7 @@ end
         local cloud = ElectroFindCloud()
         if cloud then
             SetTask('MainTask', 'Auto Full Melee | Electro: a partir uma nuvem de tempestade')
-            ElectroMove(cloud.CFrame * CFrame.new(0, 0, 6))
+            ElectroMove(cloud.CFrame) -- entra na nuvem
             if CaculateDistance(cloud.CFrame) < 25 then
                 local tool = _G.SelectWeapon
                 if tool then pcall(function() FunctionsHandler.LocalPlayerController.Methods.EquipTool:Call(tool) end) end
@@ -2765,7 +2816,7 @@ end
                 [3] = CFrame.new(-5023.91, 371.02, -3191.46),
             },
             ["Mad Scientist"] = {
-                [1] = CFrame.new(-4842.112, 717.670, -2623.149), -- [FIX] ilha mais baixa de Skylands (igual à tabela do Electro, linha ~350)
+                [1] = CFrame.new(-5382.79, 12.55, -2148.82),
                 [2] = CFrame.new(-4866.16, 33.92, -4767.11),
                 [3] = CFrame.new(-4996.06, 313.21, -3201.83),
             },
